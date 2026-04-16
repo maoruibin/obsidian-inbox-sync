@@ -1,0 +1,90 @@
+/* inBox Sync Plugin - 状态指示样式 */
+
+/* 基础图标样式 */
+.inbox-sync-idle {
+  opacity: 1;
+  transition: all 0.3s ease;
+}
+
+/* 同步中 - 旋转动画 */
+.inbox-sync-syncing {
+  animation: inbox-sync-spin 1s linear infinite;
+  color: var(--text-muted);
+}
+
+.inbox-sync-syncing svg {
+  animation: inbox-sync-spin 1s linear infinite;
+}
+
+/* 旋转关键帧 */
+@keyframes inbox-sync-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 成功状态 - 绿色闪烁 */
+.inbox-sync-success {
+  animation: inbox-sync-success-flash 0.5s ease-out;
+  color: var(--color-green);
+}
+
+.inbox-sync-success svg {
+  stroke: var(--color-green);
+}
+
+@keyframes inbox-sync-success-flash {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 错误状态 - 红色抖动 */
+.inbox-sync-error {
+  animation: inbox-sync-error-shake 0.5s ease-in-out;
+  color: var(--color-red);
+}
+
+.inbox-sync-error svg {
+  stroke: var(--color-red);
+}
+
+@keyframes inbox-sync-error-shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+/* 设置页面 - 连接测试状态 */
+.inbox-connection-status {
+  margin-top: 8px;
+  font-size: 0.9em;
+}
+
+/* 响应式图标大小调整（可选，针对不同主题） */
+@media (max-width: 400px) {
+  .inbox-sync-syncing svg {
+    animation-duration: 0.8s;
+  }
+}

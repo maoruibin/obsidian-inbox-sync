@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-inbox-sync",
+  "name": "inBox Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Sync notes from inBox app to your Obsidian vault via WebDAV/S3",
+  "author": "gudong",
+  "authorUrl": "https://inbox.gudong.site",
+  "isDesktopOnly": false
+}
