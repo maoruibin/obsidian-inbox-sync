@@ -26,8 +26,13 @@ export default class InboxSyncPlugin extends Plugin {
     // 加载设置
     await this.loadSettings();
 
-    // 创建同步管理器
-    this.syncManager = new SyncManager(this.app, this.settings);
+    // 创建同步管理器（加保护，避免初始化异常导致插件无法启动）
+    try {
+      this.syncManager = new SyncManager(this.app, this.settings);
+    } catch (error) {
+      console.error("[inBox Sync] SyncManager 初始化失败:", error);
+      new Notice(`inBox Sync 初始化失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
 
     // 添加同步命令
     this.addCommand({
@@ -64,7 +69,9 @@ export default class InboxSyncPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
-    this.syncManager.updateSettings(this.settings);
+    if (this.syncManager) {
+      this.syncManager.updateSettings(this.settings);
+    }
 
     // 更新自动同步
     if (this.settings.enableAutoSync && this.settings.syncInterval > 0) {
