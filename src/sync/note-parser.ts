@@ -5,8 +5,6 @@ import {
   XResourceInfo,
   BlockExtra,
   VoiceInfo,
-  formatDate,
-  formatMonth,
   getResourceType,
   ResourceType,
   getCreatedAt,
@@ -155,8 +153,6 @@ export class NoteParser {
     // 兼容 mimeType / mime_type / type
     const mimeType = resource.mimeType || resource.mime_type;
     const type = getResourceType(mimeType, resource.type || resource.resourceType);
-    const dateStr = formatDate(timestamp);
-    const monthStr = formatMonth(timestamp);
 
     // 确定远程路径（优先 cloudUrl > remoteUrl > path > src）
     let remotePath = "";

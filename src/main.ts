@@ -1,4 +1,4 @@
-import { Plugin, TFile, Notice, PluginSettingTab, App, Setting } from "obsidian";
+import { Plugin, Notice } from "obsidian";
 import { InboxSyncSettings, DEFAULT_SETTINGS } from "./types/settings";
 import { SyncManager } from "./sync/sync-manager";
 import { InboxSyncSettingTab } from "./ui/settings-tab";
@@ -21,7 +21,7 @@ export default class InboxSyncPlugin extends Plugin {
   private ribbonIcon: HTMLElement | null = null;
 
   async onload() {
-    console.log("Loading inBox Sync plugin");
+    console.debug("Loading inBox Sync plugin");
 
     // 加载设置
     await this.loadSettings();
@@ -39,13 +39,13 @@ export default class InboxSyncPlugin extends Plugin {
       id: "sync-inbox-now",
       name: "Sync now from inBox",
       callback: () => {
-        this.syncNow();
+        void this.syncNow();
       },
     });
 
     // 添加功能区按钮
     this.ribbonIcon = this.addRibbonIcon("refresh-cw", "Sync inBox", () => {
-      this.syncNow();
+      void this.syncNow();
     });
     this.updateRibbonIconStatus(SyncStatus.IDLE);
 
@@ -58,8 +58,8 @@ export default class InboxSyncPlugin extends Plugin {
     }
   }
 
-  async onunload() {
-    console.log("Unloading inBox Sync plugin");
+  onunload() {
+    console.debug("Unloading inBox Sync plugin");
     this.stopAutoSync();
   }
 
@@ -175,7 +175,7 @@ export default class InboxSyncPlugin extends Plugin {
 
     const intervalMs = this.settings.syncInterval * 60 * 1000;
     this.syncIntervalId = window.setTimeout(() => {
-      this.syncNow();
+      void this.syncNow();
       this.startAutoSync(); // 重新设置定时器
     }, intervalMs);
   }

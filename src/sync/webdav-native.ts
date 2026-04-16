@@ -62,9 +62,9 @@ export class WebDAVNativeClient implements CloudClient {
     // WebDAV 认证头
     const auth = btoa(`${this.username}:${this.password}`);
 
-    console.log(`[WebDAV] ${method} ${url}`);
-    console.log(`[WebDAV] 认证信息: username=${this.username}, auth=${auth.substring(0, 10)}...`);
-    console.log(`[WebDAV] 完整参数: url=${this.url}, rootPath=${this.rootPath}, path=${path}`);
+    console.debug(`[WebDAV] ${method} ${url}`);
+    console.debug(`[WebDAV] 认证信息: username=${this.username}, auth=${auth.substring(0, 10)}...`);
+    console.debug(`[WebDAV] 完整参数: url=${this.url}, rootPath=${this.rootPath}, path=${path}`);
 
     const response = await requestUrl({
       url,
@@ -77,7 +77,7 @@ export class WebDAVNativeClient implements CloudClient {
       throw: false, // 不自动抛异常，我们自己处理状态码
     });
 
-    console.log(`[WebDAV] 响应: ${response.status}`);
+    console.debug(`[WebDAV] 响应: ${response.status}`);
 
     return {
       status: response.status,
@@ -91,9 +91,9 @@ export class WebDAVNativeClient implements CloudClient {
    */
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log("[WebDAV] 测试连接...");
-      console.log("[WebDAV] URL:", this.url);
-      console.log("[WebDAV] RootPath:", this.rootPath);
+      console.debug("[WebDAV] 测试连接...");
+      console.debug("[WebDAV] URL:", this.url);
+      console.debug("[WebDAV] RootPath:", this.rootPath);
 
       // 测试根目录（传空路径，getFullUrl 会自动拼接 rootPath）
       const result = await this.webdavRequest("PROPFIND", "", {
@@ -101,13 +101,13 @@ export class WebDAVNativeClient implements CloudClient {
       });
 
       if (result.status === 207 || result.status === 200) {
-        console.log("[WebDAV] ✅ 连接成功");
+        console.debug("[WebDAV] ✅ 连接成功");
         return { success: true };
       }
 
       // 404 可能是目录不存在，尝试根路径
       if (result.status === 404) {
-        console.log("[WebDAV] 根目录不存在，尝试上级路径...");
+        console.debug("[WebDAV] 根目录不存在，尝试上级路径...");
         const rootResult = await this.webdavRequest("PROPFIND", "/", {
           Depth: "0",
         });
@@ -242,8 +242,6 @@ export class WebDAVNativeClient implements CloudClient {
           if (href && propStats.length > 0) {
             const props = propStats[0].getElementsByTagNameNS("*", "prop")[0];
             const etag = props?.getElementsByTagNameNS("*", "getetag")[0]?.textContent;
-            const lastmod = props?.getElementsByTagNameNS("*", "getlastmodified")[0]?.textContent;
-
             const filename = decodeURIComponent(href.split("/").filter(Boolean).pop() || "");
 
             if (!filename.endsWith(".json")) continue;
@@ -274,7 +272,7 @@ export class WebDAVNativeClient implements CloudClient {
     const auth = `Basic ${btoa(`${this.username}:${this.password}`)}`;
 
     try {
-      console.log(`[WebDAV] downloadAsset: ${url.substring(0, 80)}...`);
+      console.debug(`[WebDAV] downloadAsset: ${url.substring(0, 80)}...`);
       const response = await requestUrl({
         url,
         method: "GET",
@@ -284,7 +282,7 @@ export class WebDAVNativeClient implements CloudClient {
         throw: false,
       });
 
-      console.log(`[WebDAV] downloadAsset 响应: status=${response.status}, hasBuffer=${!!response.arrayBuffer}`);
+      console.debug(`[WebDAV] downloadAsset 响应: status=${response.status}, hasBuffer=${!!response.arrayBuffer}`);
 
       if (response.status === 200 && response.arrayBuffer) {
         return response.arrayBuffer;
@@ -311,8 +309,8 @@ export class WebDAVNativeClient implements CloudClient {
    * 检查资源文件是否存在（本地）
    * 由 AssetHandler 使用 Obsidian API 实现
    */
-  async assetExistsLocally(_localPath: string): Promise<boolean> {
-    return false;
+  assetExistsLocally(_localPath: string): Promise<boolean> {
+    return Promise.resolve(false);
   }
 
   /**

@@ -191,8 +191,8 @@ export class WebDAVClient implements CloudClient {
    * 检查资源文件是否存在（本地）
    * 由 AssetHandler 使用 Obsidian API 实现
    */
-  async assetExistsLocally(_localPath: string): Promise<boolean> {
-    return false;
+  assetExistsLocally(_localPath: string): Promise<boolean> {
+    return Promise.resolve(false);
   }
 
   /**

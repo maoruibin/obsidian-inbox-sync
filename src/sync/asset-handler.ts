@@ -86,7 +86,7 @@ export class AssetHandler {
     }
 
     // 检查本地是否存在
-    if (await this.assetExists(localPath)) {
+    if (this.assetExists(localPath)) {
       this.processedAssets.add(localPath);
       return false;
     }
@@ -119,7 +119,7 @@ export class AssetHandler {
   /**
    * 检查资源是否存在
    */
-  private async assetExists(path: string): Promise<boolean> {
+  private assetExists(path: string): boolean {
     const vault = this.app.vault;
     const normalized = path.replace(/^\/+/, "");
 

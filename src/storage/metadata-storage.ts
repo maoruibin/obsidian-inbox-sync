@@ -47,7 +47,7 @@ export class MetadataStorage {
           };
         }
         delete data.lastSyncEtags;
-        console.log("[MetadataStorage] 迁移旧格式元数据完成");
+        console.debug("[MetadataStorage] 迁移旧格式元数据完成");
       }
 
       // 验证格式

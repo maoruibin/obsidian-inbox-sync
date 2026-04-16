@@ -38,7 +38,7 @@ const context = await esbuild.context({
 });
 
 // 自动复制到 Obsidian vault 插件目录
-const VAULT_PLUGIN_DIR = "/Users/gudong/Nutstore Files/gudong/XBrain/.obsidian/plugins/obsidian-inbox-sync";
+const VAULT_PLUGIN_DIR = "/Users/gudong/Nutstore Files/gudong/XBrain/.obsidian/plugins/inbox-sync";
 
 function copyToVault() {
   try {

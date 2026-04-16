@@ -82,6 +82,14 @@
   font-size: 0.9em;
 }
 
+.inbox-status-success {
+  color: var(--color-green);
+}
+
+.inbox-status-error {
+  color: var(--color-red);
+}
+
 /* 响应式图标大小调整（可选，针对不同主题） */
 @media (max-width: 400px) {
   .inbox-sync-syncing svg {

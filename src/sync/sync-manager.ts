@@ -1,5 +1,4 @@
-import { App, Notice } from "obsidian";
-import JSZip from "jszip";
+import { App } from "obsidian";
 import { InboxSyncSettings, getCloudRootPath } from "../types/settings";
 import { CloudClient, CloudFileInfo } from "./cloud-client";
 import { WebDAVNativeClient } from "./webdav-native";
@@ -11,9 +10,7 @@ import {
   SyncMetadata,
   SyncStats,
   AtomicNote,
-  SyncManifest,
   ParsedNote,
-  NoteSyncMeta,
 } from "../types/inbox";
 import { MetadataStorage } from "../storage/metadata-storage";
 
@@ -48,8 +45,8 @@ export class SyncManager {
   private initializeClients() {
     const rootPath = getCloudRootPath(this.settings);
 
-    console.log(`[SyncManager] initializeClients: storageType=${this.settings.storageType}, rootPath=${rootPath}`);
-    console.log(`[SyncManager] S3 config: endpoint=${this.settings.s3Endpoint}, bucket=${this.settings.s3Bucket}, region=${this.settings.s3Region}`);
+    console.debug(`[SyncManager] initializeClients: storageType=${this.settings.storageType}, rootPath=${rootPath}`);
+    console.debug(`[SyncManager] S3 config: endpoint=${this.settings.s3Endpoint}, bucket=${this.settings.s3Bucket}, region=${this.settings.s3Region}`);
 
     if (this.settings.storageType === "webdav") {
       this.cloudClient = new WebDAVNativeClient(
@@ -115,20 +112,20 @@ export class SyncManager {
 
     try {
       notify?.("开始同步...");
-      console.log("[SyncManager] ===== 开始增量同步 =====");
+      console.debug("[SyncManager] ===== 开始增量同步 =====");
 
       // 1. 读取本地同步元数据
       const syncMetadata = await this.metadataStorage.load();
-      console.log(`[SyncManager] 本地元数据加载完成, 已有 ${Object.keys(syncMetadata.lastSyncMeta).length} 条记录`);
+      console.debug(`[SyncManager] 本地元数据加载完成, 已有 ${Object.keys(syncMetadata.lastSyncMeta).length} 条记录`);
 
       // 2. 列出云端所有文件元数据（快速，只拿 ETag/MTime，不下载内容）
       notify?.("扫描云端文件列表...");
       const cloudFiles = await this.cloudClient.listNotes();
-      console.log(`[SyncManager] 云端文件列表获取完成, 共 ${cloudFiles.length} 个文件`);
+      console.debug(`[SyncManager] 云端文件列表获取完成, 共 ${cloudFiles.length} 个文件`);
 
       // 3. 增量对比：找出变化的文件
       const { toDownload, toDelete, unchanged } = this.diffCloudAndLocal(cloudFiles, syncMetadata);
-      console.log(`[SyncManager] 增量对比: 需下载 ${toDownload.length}, 需删除 ${toDelete.length}, 未变化 ${unchanged}`);
+      console.debug(`[SyncManager] 增量对比: 需下载 ${toDownload.length}, 需删除 ${toDelete.length}, 未变化 ${unchanged}`);
 
       // 4. 处理云端删除的笔记
       if (toDelete.length > 0) {
@@ -154,7 +151,7 @@ export class SyncManager {
         await this.downloadChangedNotes(toDownload, allNotes, signal, notify);
       }
 
-      console.log(`[SyncManager] 云端笔记收集完成, 变化 ${allNotes.size} 条, 跳过 ${unchanged} 条`);
+      console.debug(`[SyncManager] 云端笔记收集完成, 变化 ${allNotes.size} 条, 跳过 ${unchanged} 条`);
 
       // 6. 第一轮：解析 + 写入所有笔记（不含 parent 信息）
       let processedCount = 0;
@@ -212,9 +209,9 @@ export class SyncManager {
           stats.downloadedAssets += assetStats.downloaded;
           stats.skippedAssets += assetStats.skipped;
           stats.failedAssets += assetStats.failed;
-        } catch (error: any) {
+        } catch (error: unknown) {
           stats.failedNotes++;
-          const errorMsg = `处理笔记 ${noteId} 失败: ${error.message}`;
+          const errorMsg = `处理笔记 ${noteId} 失败: ${error instanceof Error ? error.message : String(error)}`;
           stats.errors.push(errorMsg);
           console.error(errorMsg);
         }
@@ -222,7 +219,7 @@ export class SyncManager {
 
       // 6.5 第二轮：补全子笔记的 parent frontmatter + 父笔记嵌入引用
       if (parentChildMap.size > 0) {
-        console.log(`[SyncManager] 更新父子关系: ${parentChildMap.size} 个父笔记`);
+        console.debug(`[SyncManager] 更新父子关系: ${parentChildMap.size} 个父笔记`);
         for (const [parentId, childFileNames] of parentChildMap) {
           try {
             // 更新父笔记：追加子笔记嵌入
@@ -256,7 +253,7 @@ export class SyncManager {
         }
       }
       if (linkConvertCount > 0) {
-        console.log(`[SyncManager] 链接转换完成: ${linkConvertCount} 个笔记`);
+        console.debug(`[SyncManager] 链接转换完成: ${linkConvertCount} 个笔记`);
       }
 
       // 7. 更新元数据：写入所有云端文件的 ETag/MTime（包括跳过的）
@@ -275,15 +272,15 @@ export class SyncManager {
         ? ((unchanged / cloudFiles.length) * 100).toFixed(1)
         : "0";
       notify?.(`同步完成！新增 ${stats.newNotes}, 更新 ${stats.updatedNotes}, 删除 ${stats.deletedNotes}, 跳过 ${unchanged} (${elapsed}s)`);
-      console.log(`[SyncManager] ===== 同步完成 (${elapsed}s) =====`);
-      console.log(`[SyncManager] 增量效率: 跳过 ${unchanged}/${cloudFiles.length} (${efficiency}%)`);
-      console.log(`[SyncManager] 新增: ${stats.newNotes}, 更新: ${stats.updatedNotes}, 删除: ${stats.deletedNotes}, 失败: ${stats.failedNotes}`);
-    } catch (error: any) {
+      console.debug(`[SyncManager] ===== 同步完成 (${elapsed}s) =====`);
+      console.debug(`[SyncManager] 增量效率: 跳过 ${unchanged}/${cloudFiles.length} (${efficiency}%)`);
+      console.debug(`[SyncManager] 新增: ${stats.newNotes}, 更新: ${stats.updatedNotes}, 删除: ${stats.deletedNotes}, 失败: ${stats.failedNotes}`);
+    } catch (error: unknown) {
       if (signal.aborted) {
         notify?.("同步已取消");
-        console.log("[SyncManager] 同步已取消");
+        console.debug("[SyncManager] 同步已取消");
       } else {
-        stats.errors.push(`同步错误: ${error.message}`);
+        stats.errors.push(`同步错误: ${error instanceof Error ? error.message : String(error)}`);
         console.error("[SyncManager] 同步错误:", error);
       }
     }
@@ -302,7 +299,7 @@ export class SyncManager {
     metadata: SyncMetadata
   ): { toDownload: CloudFileInfo[]; toDelete: string[]; unchanged: number } {
     const toDownload: CloudFileInfo[] = [];
-    const unchanged = 0;
+    const _unchanged = 0;
     const cloudNoteIds = new Set<string>();
 
     for (const file of cloudFiles) {
@@ -368,12 +365,12 @@ export class SyncManager {
       const processed = downloaded + failed;
       if (processed % logInterval === 0 || processed === total) {
         const msg = `下载笔记 ${processed}/${total} (成功: ${downloaded}, 失败: ${failed})`;
-        console.log(`[SyncManager] ${msg}`);
+        console.debug(`[SyncManager] ${msg}`);
         notify?.(msg);
       }
     }
 
-    console.log(`[SyncManager] 笔记下载完成: 成功 ${downloaded}, 失败 ${failed}, 总计 ${total}`);
+    console.debug(`[SyncManager] 笔记下载完成: 成功 ${downloaded}, 失败 ${failed}, 总计 ${total}`);
   }
 
   /**

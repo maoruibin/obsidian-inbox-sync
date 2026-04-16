@@ -25,7 +25,7 @@ const t: Translations = {
   // 存储类型
   storageType: { zh: "存储类型", en: "Storage type" },
   storageTypeDesc: { zh: "选择云存储服务", en: "Choose your cloud storage provider" },
-  s3Option: { zh: "S3 兼容存储", en: "S3 Compatible" },
+  s3Option: { zh: "S3 兼容存储", en: "S3 compatible" },
 
   // WebDAV
   webdavTitle: { zh: "WebDAV 配置", en: "WebDAV Configuration" },
@@ -102,7 +102,7 @@ export class InboxSyncSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     // 标题和说明
-    containerEl.createEl("h2", { text: i18n("title") });
+    new Setting(containerEl).setName(i18n("title")).setHeading();
     containerEl.createEl("p", { text: i18n("description") });
 
     // ========== 云存储配置 ==========
@@ -123,7 +123,7 @@ export class InboxSyncSettingTab extends PluginSettingTab {
 
     // ========== WebDAV 配置 ==========
     if (this.plugin.settings.storageType === "webdav") {
-      containerEl.createEl("h3", { text: i18n("webdavTitle") });
+      new Setting(containerEl).setName(i18n("webdavTitle")).setHeading();
 
       new Setting(containerEl)
         .setName(i18n("webdavUrl"))
@@ -170,7 +170,7 @@ export class InboxSyncSettingTab extends PluginSettingTab {
 
     // ========== S3 配置 ==========
     if (this.plugin.settings.storageType === "s3") {
-      containerEl.createEl("h3", { text: i18n("s3Title") });
+      new Setting(containerEl).setName(i18n("s3Title")).setHeading();
 
       new Setting(containerEl)
         .setName(i18n("s3Endpoint"))
@@ -242,7 +242,7 @@ export class InboxSyncSettingTab extends PluginSettingTab {
     }
 
     // ========== 同步设置 ==========
-    containerEl.createEl("h3", { text: i18n("syncTitle") });
+    new Setting(containerEl).setName(i18n("syncTitle")).setHeading();
 
     new Setting(containerEl)
       .setName(i18n("vaultFolder"))
@@ -284,7 +284,7 @@ export class InboxSyncSettingTab extends PluginSettingTab {
       );
 
     // ========== 高级选项 ==========
-    containerEl.createEl("h3", { text: i18n("advancedTitle") });
+    new Setting(containerEl).setName(i18n("advancedTitle")).setHeading();
 
     new Setting(containerEl)
       .setName(i18n("frontmatterTags"))
@@ -356,17 +356,17 @@ export class InboxSyncSettingTab extends PluginSettingTab {
 
               if (result.success) {
                 statusEl.textContent = i18n("connectionSuccess");
-                statusEl.style.color = "var(--color-green)";
+                statusEl.className = "inbox-connection-status inbox-status-success";
                 new Notice(i18n("noticeSuccess"));
               } else {
                 statusEl.textContent = i18n("connectionFailed") + result.error;
-                statusEl.style.color = "var(--color-red)";
+                statusEl.className = "inbox-connection-status inbox-status-error";
                 new Notice(i18n("noticeFailed") + result.error);
               }
             } catch (error) {
               const errorMsg = error instanceof Error ? error.message : String(error);
               statusEl.textContent = i18n("connectionFailed") + errorMsg;
-              statusEl.style.color = "var(--color-red)";
+              statusEl.className = "inbox-connection-status inbox-status-error";
               new Notice(i18n("noticeFailed") + errorMsg);
             } finally {
               this.testingConnection = false;

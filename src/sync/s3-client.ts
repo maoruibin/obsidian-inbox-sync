@@ -1,14 +1,30 @@
 import { CloudClient, CloudFileInfo } from "./cloud-client";
 import { AtomicNote, SyncManifest } from "../types/inbox";
 import { ObsidianRequestHandler } from "./obsidian-request-handler";
+import type {
+  S3Client as S3ClientType,
+  ListObjectsV2Command as ListObjectsV2CommandCtor,
+  GetObjectCommand as GetObjectCommandCtor,
+  ListObjectsV2CommandInput,
+  ListObjectsV2CommandOutput,
+  GetObjectCommandInput,
+  GetObjectCommandOutput,
+  _Object as S3Object,
+} from "@aws-sdk/client-s3";
 
 // 动态导入 AWS SDK v3，避免 esbuild 打包问题
-let S3ClientClass: any;
-let ListObjectsV2Command: any;
-let GetObjectCommand: any;
+let S3ClientClass: typeof S3ClientType | undefined;
+let ListObjectsV2Command: typeof ListObjectsV2CommandCtor | undefined;
+let GetObjectCommand: typeof GetObjectCommandCtor | undefined;
 
-async function getAWSSDK() {
-  if (!S3ClientClass) {
+interface AWSSDK {
+  S3ClientClass: typeof S3ClientType;
+  ListObjectsV2Command: typeof ListObjectsV2CommandCtor;
+  GetObjectCommand: typeof GetObjectCommandCtor;
+}
+
+async function getAWSSDK(): Promise<AWSSDK> {
+  if (!S3ClientClass || !ListObjectsV2Command || !GetObjectCommand) {
     const sdk = await import("@aws-sdk/client-s3");
     S3ClientClass = sdk.S3Client;
     ListObjectsV2Command = sdk.ListObjectsV2Command;
@@ -21,7 +37,7 @@ async function getAWSSDK() {
  * S3 客户端实现 - 使用 AWS SDK v3
  */
 export class S3Client implements CloudClient {
-  private client: any = null;
+  private client: InstanceType<typeof S3ClientType> | null = null;
   private bucket: string;
   private rootPath: string;
   private config: {
@@ -68,7 +84,7 @@ export class S3Client implements CloudClient {
   /**
    * 延迟初始化 S3 客户端
    */
-  private async getClient(): Promise<any> {
+  private async getClient(): Promise<InstanceType<typeof S3ClientType>> {
     if (!this.client) {
       const { S3ClientClass } = await getAWSSDK();
 
@@ -90,9 +106,10 @@ export class S3Client implements CloudClient {
       });
 
       // 添加 cache-control 中间件（参考 remotely-save）
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.client.middlewareStack.add(
-        (next: any, _context: any) => (args: any) => {
-          (args.request as any).headers["cache-control"] = "no-cache";
+        (next: any) => (args: any) => {
+          args.request.headers["cache-control"] = "no-cache";
           return next(args);
         },
         { step: "build" }
@@ -121,17 +138,17 @@ export class S3Client implements CloudClient {
    */
   async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log("[S3] 开始测试连接...");
-      console.log("[S3] Endpoint:", this.config.endpoint);
-      console.log("[S3] Region:", this.config.region);
-      console.log("[S3] Bucket:", this.bucket);
-      console.log("[S3] RootPath:", this.rootPath);
-      console.log("[S3] AccessKey (前4位):", this.config.accessKeyId.substring(0, 4) + "****");
+      console.debug("[S3] 开始测试连接...");
+      console.debug("[S3] Endpoint:", this.config.endpoint);
+      console.debug("[S3] Region:", this.config.region);
+      console.debug("[S3] Bucket:", this.bucket);
+      console.debug("[S3] RootPath:", this.rootPath);
+      console.debug("[S3] AccessKey (前4位):", this.config.accessKeyId.substring(0, 4) + "****");
 
       const client = await this.getClient();
       const { ListObjectsV2Command } = await getAWSSDK();
 
-      console.log("[S3] S3Client 已创建，开始发送 ListObjectsV2 请求...");
+      console.debug("[S3] S3Client 已创建，开始发送 ListObjectsV2 请求...");
 
       const command = new ListObjectsV2Command({
         Bucket: this.bucket,
@@ -139,7 +156,7 @@ export class S3Client implements CloudClient {
         MaxKeys: 1,
       });
 
-      console.log("[S3] 请求参数:", {
+      console.debug("[S3] 请求参数:", {
         Bucket: this.bucket,
         Prefix: this.rootPath ? `${this.rootPath}/` : "",
         MaxKeys: 1,
@@ -147,30 +164,31 @@ export class S3Client implements CloudClient {
 
       const result = await client.send(command);
 
-      console.log("[S3] ✅ 连接成功!");
-      console.log("[S3] 响应:", result);
+      console.debug("[S3] ✅ 连接成功!");
+      console.debug("[S3] 响应:", result);
 
       return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as Error & { name?: string; details?: string; $metadata?: unknown };
       console.error("[S3] ❌ 测试连接失败!");
-      console.error("[S3] 错误类型:", error.constructor.name);
-      console.error("[S3] 错误名称:", error.name);
-      console.error("[S3] 错误消息:", error.message);
-      console.error("[S3] 错误详情:", error.details || error.$metadata || "无");
-      console.error("[S3] 完整错误:", error);
+      console.error("[S3] 错误类型:", err.constructor.name);
+      console.error("[S3] 错误名称:", err.name);
+      console.error("[S3] 错误消息:", err.message);
+      console.error("[S3] 错误详情:", err.details || err.$metadata || "无");
+      console.error("[S3] 完整错误:", err);
 
       // 提取更友好的错误信息
-      let friendlyError = error.message || String(error);
+      let friendlyError = err.message || String(err);
 
-      if (error.name === "NetworkFailure") {
+      if (err.name === "NetworkFailure") {
         friendlyError = "网络连接失败 - 可能原因:\n1. Endpoint 地址错误\n2. 网络不可达\n3. SSL 证书问题\n4. CORS 限制(如果是浏览器环境)";
-      } else if (error.name === "NoSuchBucket") {
+      } else if (err.name === "NoSuchBucket") {
         friendlyError = `Bucket "${this.bucket}" 不存在或无权访问`;
-      } else if (error.name === "InvalidAccessKeyId") {
+      } else if (err.name === "InvalidAccessKeyId") {
         friendlyError = "Access Key ID 无效";
-      } else if (error.name === "SignatureDoesNotMatch") {
+      } else if (err.name === "SignatureDoesNotMatch") {
         friendlyError = "Secret Key 错误";
-      } else if (error.name === "AccessDenied") {
+      } else if (err.name === "AccessDenied") {
         friendlyError = "访问被拒绝 - 请检查权限配置";
       }
 
@@ -292,7 +310,7 @@ export class S3Client implements CloudClient {
       let continuationToken: string | undefined;
 
       do {
-        console.log(`[S3] listNotes 查询前缀: ${notesPrefix}`);
+        console.debug(`[S3] listNotes 查询前缀: ${notesPrefix}`);
         const response = await client.send(
           new ListObjectsV2Command({
             Bucket: this.bucket,
@@ -301,11 +319,11 @@ export class S3Client implements CloudClient {
           })
         );
 
-        console.log(`[S3] listNotes 响应: IsTruncated=${response.IsTruncated}, KeyCount=${response.KeyCount}, Contents=${response.Contents?.length || 0}`);
+        console.debug(`[S3] listNotes 响应: IsTruncated=${response.IsTruncated}, KeyCount=${response.KeyCount}, Contents=${response.Contents?.length || 0}`);
         if (response.Contents) {
           // 打印前3个文件的 Key 帮助调试
-          response.Contents.slice(0, 3).forEach((obj: any) => {
-            console.log(`[S3] listNotes 文件: ${obj.Key} (${obj.Size} bytes)`);
+          response.Contents.slice(0, 3).forEach((obj: S3Object) => {
+            console.debug(`[S3] listNotes 文件: ${obj.Key} (${obj.Size} bytes)`);
           });
         }
 
@@ -396,8 +414,8 @@ export class S3Client implements CloudClient {
    * 检查资源文件是否存在（本地）
    * 由 AssetHandler 使用 Obsidian API 实现
    */
-  async assetExistsLocally(_localPath: string): Promise<boolean> {
-    return false;
+  assetExistsLocally(_localPath: string): Promise<boolean> {
+    return Promise.resolve(false);
   }
 
   /**

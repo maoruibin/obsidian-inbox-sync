@@ -152,7 +152,7 @@ export class MarkdownWriter {
   private escapeYaml(text: string): string {
     if (!text) return "";
 
-    if (/[:{}\[\],&*\#?|<>=!%@`]/.test(text)) {
+    if (/[:{}\[\],&*#?|<>=!%@`]/.test(text)) {
       return `"${text.replace(/"/g, '\\"')}"`;
     }
 
@@ -196,7 +196,7 @@ export class MarkdownWriter {
           const match = content.match(/inbox_id:\s*(\S+)/);
           if (match && match[1] === noteId) {
             await vault.adapter.remove(filePath);
-            console.log(`[MarkdownWriter] 已删除笔记: ${filePath}`);
+            console.debug(`[MarkdownWriter] 已删除笔记: ${filePath}`);
             return true;
           }
         } catch {
@@ -250,7 +250,7 @@ export class MarkdownWriter {
       content += embedLines.join("\n");
 
       await vault.modify(file, content);
-      console.log(`[MarkdownWriter] 已更新父笔记嵌入: ${parentFilePath}, ${childFileNames.length} 个子笔记`);
+      console.debug(`[MarkdownWriter] 已更新父笔记嵌入: ${parentFilePath}, ${childFileNames.length} 个子笔记`);
     } catch (error) {
       console.error(`[MarkdownWriter] 更新父笔记嵌入失败: ${parentFilePath}`, error);
     }
@@ -370,7 +370,7 @@ export class MarkdownWriter {
 
       if (modified) {
         await vault.modify(file, content);
-        console.log(`[MarkdownWriter] 已转换链接: ${fileName}`);
+        console.debug(`[MarkdownWriter] 已转换链接: ${fileName}`);
       }
     } catch (error) {
       console.error(`[MarkdownWriter] 转换链接失败: ${filePath}`, error);

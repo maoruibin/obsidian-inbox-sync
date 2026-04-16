@@ -1,4 +1,4 @@
-import { AtomicNote, SyncManifest, BatchInfo } from "../types/inbox";
+import { AtomicNote, SyncManifest } from "../types/inbox";
 
 /**
  * 云存储文件信息
