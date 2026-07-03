@@ -1,7 +1,9 @@
 import {
   ParsedNote,
   ParsedAsset,
+  ParsedAnnotation,
   AtomicNote,
+  AtomicNoteAnnotation,
   XResourceInfo,
   BlockExtra,
   VoiceInfo,
@@ -72,6 +74,8 @@ export class NoteParser {
       parsedAudios.push(voiceAsset);
     }
 
+    const annotations = this.parseAnnotations(note.annotations, published, updated);
+
     return {
       blockId: note.blockId || 0,
       noteId: note.id || `note-${note.blockId}`,
@@ -87,6 +91,54 @@ export class NoteParser {
       published,
       isRemoved,
       parentId: getParentId(note) || undefined,
+      annotations,
+    };
+  }
+
+  /**
+   * 解析 ver=2 内联批注
+   */
+  private parseAnnotations(
+    rawAnnotations: AtomicNoteAnnotation[] | undefined,
+    fallbackCreated: number,
+    fallbackUpdated: number
+  ): ParsedAnnotation[] {
+    if (!Array.isArray(rawAnnotations)) return [];
+
+    return rawAnnotations
+      .map((raw) => this.parseAnnotation(raw, fallbackCreated, fallbackUpdated))
+      .filter((annotation): annotation is ParsedAnnotation => annotation !== null);
+  }
+
+  private parseAnnotation(
+    raw: AtomicNoteAnnotation,
+    fallbackCreated: number,
+    fallbackUpdated: number
+  ): ParsedAnnotation | null {
+    if (!raw || typeof raw !== "object") return null;
+
+    const noteId = typeof raw.id === "string" ? raw.id : "";
+    if (!noteId) return null;
+
+    const content = typeof raw.content === "string" ? raw.content : "";
+    const created = this.parseDate(raw.created_at, fallbackCreated);
+    const updated = this.parseDate(raw.updated_at, fallbackUpdated);
+    const explicitTags = Array.isArray(raw.tags)
+      ? raw.tags.filter((tag): tag is string => typeof tag === "string")
+      : [];
+    const tags = this.mergeTags(explicitTags, this.extractTags(content));
+    const rawAssets = Array.isArray(raw.assets) ? raw.assets : [];
+    const assets = rawAssets.map((asset) => this.parseAsset(asset, created));
+
+    return {
+      noteId,
+      title: typeof raw.title === "string" || raw.title === null ? raw.title : undefined,
+      content,
+      tags,
+      assets,
+      createdAt: new Date(created),
+      updatedAt: new Date(updated),
+      isRemoved: raw.is_removed === true,
     };
   }
 
@@ -254,5 +306,23 @@ export class NoteParser {
     }
 
     return tags;
+  }
+
+  private mergeTags(...tagGroups: string[][]): string[] {
+    const tags: string[] = [];
+    for (const group of tagGroups) {
+      for (const tag of group) {
+        if (tag && !tags.includes(tag)) {
+          tags.push(tag);
+        }
+      }
+    }
+    return tags;
+  }
+
+  private parseDate(value: string | undefined, fallback: number): number {
+    if (!value) return fallback;
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
 }

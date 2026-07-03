@@ -1,6 +1,6 @@
 import { App, TFile } from "obsidian";
 import { InboxSyncSettings } from "../types/settings";
-import { ParsedNote } from "../types/inbox";
+import { ParsedAnnotation, ParsedNote } from "../types/inbox";
 
 /** 批注嵌入块的标记，用于识别和替换 */
 const ANNOTATION_BLOCK_START = "\n\n---\n\n> **批注**\n";
@@ -129,6 +129,11 @@ export class MarkdownWriter {
     // 正文内容
     lines.push(this.processContent(note));
 
+    const annotationBlock = this.generateInlineAnnotations(note.annotations);
+    if (annotationBlock) {
+      lines.push(annotationBlock);
+    }
+
     return lines.join("\n");
   }
 
@@ -137,6 +142,56 @@ export class MarkdownWriter {
    */
   private processContent(note: ParsedNote): string {
     return note.content;
+  }
+
+  /**
+   * 渲染 ver=2 内联批注到父笔记末尾
+   */
+  private generateInlineAnnotations(annotations: ParsedAnnotation[]): string | null {
+    const visibleAnnotations = annotations.filter((annotation) => !annotation.isRemoved);
+    if (visibleAnnotations.length === 0) return null;
+
+    const lines: string[] = ["", "---", "", "> **批注**"];
+
+    for (const annotation of visibleAnnotations) {
+      lines.push(">");
+      lines.push(`> [!note] ${this.getAnnotationTitle(annotation)}`);
+
+      const contentLines = annotation.content.split(/\r?\n/);
+      if (contentLines.length === 0 || (contentLines.length === 1 && contentLines[0].trim() === "")) {
+        lines.push("> ");
+      } else {
+        for (const line of contentLines) {
+          lines.push(line ? `> ${line}` : ">");
+        }
+      }
+
+      if (annotation.tags.length > 0) {
+        lines.push(">");
+        lines.push(`> ${annotation.tags.map((tag) => this.formatAnnotationTag(tag)).join(" ")}`);
+      }
+    }
+
+    return lines.join("\n");
+  }
+
+  private getAnnotationTitle(annotation: ParsedAnnotation): string {
+    const title = annotation.title?.trim();
+    const time = this.formatAnnotationTime(annotation.createdAt.getTime());
+    if (title && title !== "Untitled") {
+      return `${title} - ${time}`;
+    }
+    return time;
+  }
+
+  private formatAnnotationTime(timestamp: number): string {
+    const d = new Date(timestamp);
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  private formatAnnotationTag(tag: string): string {
+    return tag.startsWith("#") ? tag : `#${tag}`;
   }
 
   /**

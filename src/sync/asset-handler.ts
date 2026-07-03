@@ -44,6 +44,7 @@ export class AssetHandler {
       ...note.videos,
       ...note.audios,
       ...note.attachments,
+      ...note.annotations.flatMap((annotation) => annotation.assets),
     ];
 
     stats.total = allAssets.length;

@@ -95,11 +95,27 @@ export interface AtomicNote {
   content: AtomicNoteContent;
   meta: AtomicNoteMeta;
   flags: AtomicNoteFlags;
+  annotations?: AtomicNoteAnnotation[];  // ver=2: 批注内联到父笔记
   parentId: string | null;
   parent_id?: string;       // Android snake_case
   imageJson: string;
   extra: string;
   blockId: number;
+}
+
+/**
+ * ver=2 内联批注（云端原始结构）
+ */
+export interface AtomicNoteAnnotation {
+  id?: string;              // noteId
+  content?: string;
+  title?: string | null;
+  tags?: string[];
+  assets?: XResourceInfo[];
+  links?: NoteLink[];
+  created_at?: string;
+  updated_at?: string;
+  is_removed?: boolean;
 }
 
 /**
@@ -147,6 +163,21 @@ export interface ParsedNote {
   published: number;        // 毫秒时间戳（兼容旧字段）
   isRemoved: boolean;       // 是否已删除
   parentId?: string;        // 父笔记 noteId（批注笔记）
+  annotations: ParsedAnnotation[];
+}
+
+/**
+ * 解析后的 ver=2 内联批注
+ */
+export interface ParsedAnnotation {
+  noteId: string;
+  title?: string | null;
+  content: string;
+  tags: string[];
+  assets: ParsedAsset[];
+  createdAt: Date;
+  updatedAt: Date;
+  isRemoved: boolean;
 }
 
 /**
