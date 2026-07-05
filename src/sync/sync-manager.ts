@@ -183,7 +183,7 @@ export class SyncManager {
           }
 
           // 写入 Markdown（第一阶段不带 parent）
-          const result = await this.markdownWriter.writeNote(parsedNote);
+          const result = await this.markdownWriter.writeNote(parsedNote, syncMetadata.boxFolders || {});
 
           // 记录 noteId -> { fileName, parsedNote } 映射
           noteIdFileMap.set(parsedNote.noteId, { fileName: result.fileName, parsedNote });

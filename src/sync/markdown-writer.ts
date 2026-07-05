@@ -28,12 +28,19 @@ export class MarkdownWriter {
    * 所有笔记平铺在 inBox/ 目录下
    * @returns WriteNoteResult 包含是否新建和文件名
    */
-  async writeNote(note: ParsedNote, parentFileName?: string): Promise<WriteNoteResult> {
+  async writeNote(
+    note: ParsedNote,
+    boxFolders: Record<string, string>,
+    parentFileName?: string
+  ): Promise<WriteNoteResult> {
     const vault = this.app.vault;
-    const folderPath = this.getBasePath();
+    const folderPath = this.computeNoteFolderPath(note, boxFolders);
 
-    // 确保文件夹存在
+    // 确保文件夹存在（包括盒子子文件夹）
     await vault.adapter.mkdir(folderPath);
+
+    // 检查笔记是否已在某个错误路径（懒迁移）
+    await this.migrateNoteToTargetFolder(note, folderPath);
 
     // 确定标题
     const displayTitle = this.getDisplayTitle(note);
@@ -71,6 +78,41 @@ export class MarkdownWriter {
       // 文件不存在，创建新文件
       await vault.create(filePath, markdown);
       return { isNew: true, fileName };
+    }
+  }
+
+  /**
+   * 懒迁移：如果笔记已经在某个路径，但不是目标文件夹，移动过去
+   * 路径一致 / 笔记不存在 / 移动失败 都视为无操作
+   */
+  private async migrateNoteToTargetFolder(
+    note: ParsedNote,
+    targetFolderPath: string
+  ): Promise<void> {
+    const vault = this.app.vault;
+
+    const existingPath = await this.findNotePath(note.noteId);
+    if (!existingPath) return;  // 笔记不存在，新建，无需迁移
+
+    const targetFileName = existingPath.split("/").pop()!;
+    const expectedPath = `${targetFolderPath}/${targetFileName}`;
+
+    if (existingPath === expectedPath) return;  // 已在正确位置
+
+    // 目标文件夹可能没创建
+    await vault.adapter.mkdir(targetFolderPath);
+
+    // 用 vault.rename 让 Obsidian 自动修 [[link]] 引用
+    const file = vault.getAbstractFileByPath(existingPath);
+    if (!(file instanceof TFile)) return;
+
+    try {
+      await vault.rename(file, expectedPath);
+      console.debug(
+        `[MarkdownWriter] 笔记迁移: ${existingPath} → ${expectedPath}`
+      );
+    } catch (error) {
+      console.error(`[MarkdownWriter] 笔记迁移失败: ${existingPath}`, error);
     }
   }
 
@@ -362,20 +404,22 @@ export class MarkdownWriter {
    */
   async addChildParentRef(childFileName: string, parentFileName: string): Promise<void> {
     const vault = this.app.vault;
-    const basePath = this.getBasePath();
-    const filePath = `${basePath}/${childFileName}.md`;
+
+    // 先按文件名在所有位置查找
+    const filePath = await this.findFileByName(childFileName);
+    if (!filePath) {
+      console.warn(`[MarkdownWriter] addChildParentRef: 找不到文件 ${childFileName}.md`);
+      return;
+    }
 
     try {
       const file = vault.getAbstractFileByPath(filePath);
       if (!(file instanceof TFile)) return;
 
       let content = await vault.read(file);
-
-      // 在 frontmatter 结束标记 --- 之前插入 parent 字段
-      const frontmatterEnd = content.indexOf("\n---", 4); // 跳过第一个 ---
+      const frontmatterEnd = content.indexOf("\n---", 4);
       if (frontmatterEnd !== -1) {
         const parentLine = `parent: "[[${parentFileName}]]"`;
-        // 检查是否已有 parent 字段
         if (!content.includes("parent:")) {
           content = content.substring(0, frontmatterEnd) + "\n" + parentLine + content.substring(frontmatterEnd);
           await vault.modify(file, content);
@@ -384,6 +428,23 @@ export class MarkdownWriter {
     } catch (error) {
       console.error(`[MarkdownWriter] 添加 parent 引用失败: ${filePath}`, error);
     }
+  }
+
+  /**
+   * 按文件名（不含扩展名）查找文件路径，递归扫描所有子文件夹
+   */
+  private async findFileByName(fileNameWithoutExt: string): Promise<string | null> {
+    const basePath = this.getBasePath();
+    try {
+      const allFiles = await this.findAllMdFilesRecursive(basePath);
+      const target = `${fileNameWithoutExt}.md`;
+      for (const fp of allFiles) {
+        if (fp.endsWith(`/${target}`)) return fp;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
   }
 
   /**
@@ -460,8 +521,11 @@ export class MarkdownWriter {
     blockIdFileMap: Map<number, string>
   ): Promise<void> {
     const vault = this.app.vault;
-    const basePath = this.getBasePath();
-    const filePath = `${basePath}/${fileName}.md`;
+    const filePath = await this.findFileByName(fileName);
+    if (!filePath) {
+      console.warn(`[MarkdownWriter] convertLinks: 找不到文件 ${fileName}.md`);
+      return;
+    }
 
     try {
       const file = vault.getAbstractFileByPath(filePath);
@@ -470,15 +534,12 @@ export class MarkdownWriter {
       let content = await vault.read(file);
       let modified = false;
 
-      // 匹配所有 [[...]] 链接（不匹配 ![[...]] 嵌入引用）
       content = content.replace(/(?<!!)\[\[([^\]]+)\]\]/g, (match, linkTarget: string) => {
         let replacement: string | null = null;
 
         if (linkTarget.startsWith("note-")) {
-          // [[note-xxx]] → noteId 格式
           replacement = noteIdFileMap.get(linkTarget) ?? null;
         } else if (/^Card\d+$/.test(linkTarget)) {
-          // [[Card123]] → blockId 老格式
           const blockId = parseInt(linkTarget.replace("Card", ""), 10);
           if (!isNaN(blockId)) {
             replacement = blockIdFileMap.get(blockId) ?? null;
