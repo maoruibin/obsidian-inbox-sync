@@ -1,0 +1,51 @@
+# CLAUDE.md
+
+## 项目概述
+
+Obsidian 插件，将 inBox 笔记单向同步到 Obsidian vault。支持增量同步、完整资源（图片/视频/录音/附件）、层级标签提取。
+
+## 技术栈
+
+- **语言**: TypeScript
+- **构建**: esbuild
+- **平台**: Obsidian API
+
+## 架构
+
+```
+src/            # 源码
+main.js         # 构建产物（发布用）
+manifest.json   # 插件元信息
+styles.css      # 样式
+```
+
+## 核心功能
+
+- 单向同步：inBox → Obsidian
+- 支持数据源：WebDAV / S3 云存储
+- 增量同步：仅同步有变化的笔记
+- 资源同步：图片、视频、录音、附件
+- 标签提取：支持层级标签（`#tag/subtag`）
+
+## 同步契约
+
+本插件属于 inBox 多端同步体系。同步协议权威文档是 `/Users/gudong/code/workpace/ReProject/ThinkPlus/docs/inbox-tech/sync/README.md`。
+
+只要修改数据同步行为，必须同步检查并更新该 README，包括云端 JSON 字段、noteId、批注/子笔记、删除传播、冲突处理、ETag/mtime、资源路径和跨端兼容性。
+
+## 开发命令
+
+```bash
+# 安装依赖
+npm install
+
+# 开发模式（watch）
+npm run dev
+
+# 生产构建
+npm run build
+```
+
+## 安装方式
+
+将 `main.js` + `manifest.json` 放入 `.obsidian/plugins/obsidian-inbox-sync/`，在 Obsidian 设置中启用。

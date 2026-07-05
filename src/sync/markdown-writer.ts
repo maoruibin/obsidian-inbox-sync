@@ -583,26 +583,29 @@ export class MarkdownWriter {
       return;
     }
 
-    // 如果新路径已存在(用户手动建了同名文件夹),改名时撞车
-    const newFolder = vault.getAbstractFileByPath(newPath);
-    if (newFolder instanceof TFolder) {
+    // 决定最终重命名目标路径(处理目标已存在的撞名情况)
+    const collidingFolder = vault.getAbstractFileByPath(newPath);
+    let actualTargetPath: string;
+    if (collidingFolder instanceof TFolder) {
+      actualTargetPath = `${basePath}/${newFolderName}-${boxId.slice(0, 8)}`;
       console.warn(
-        `[MarkdownWriter] renameBoxFolder: 目标 ${newPath} 已存在,改为追加 box_id 后缀`
+        `[MarkdownWriter] renameBoxFolder: 目标 ${newPath} 已存在,改为 ${actualTargetPath}`
       );
-      const safeNewPath = `${basePath}/${newFolderName}-${boxId.slice(0, 8)}`;
-      await vault.rename(oldFolder, safeNewPath);
     } else {
-      await vault.rename(oldFolder, newPath);
-      console.debug(`[MarkdownWriter] 文件夹重命名: ${oldPath} → ${newPath}`);
+      actualTargetPath = newPath;
     }
 
-    // 遍历新文件夹下所有 .md,更新 frontmatter box 字段
-    const targetPath = newFolder instanceof TFolder
-      ? newPath
-      : `${basePath}/${newFolderName}-${boxId.slice(0, 8)}`;
-    const mdFiles = await this.findAllMdFilesRecursive(targetPath);
+    await vault.rename(oldFolder, actualTargetPath);
+    console.debug(`[MarkdownWriter] 文件夹重命名: ${oldPath} → ${actualTargetPath}`);
+
+    // 遍历最终文件夹下所有 .md,更新 frontmatter box 字段
+    const mdFiles = await this.findAllMdFilesRecursive(actualTargetPath);
     for (const filePath of mdFiles) {
-      await this.updateFrontmatterBoxField(filePath, newFolderName);
+      try {
+        await this.updateFrontmatterBoxField(filePath, newFolderName);
+      } catch (error) {
+        console.error(`[MarkdownWriter] 更新 frontmatter 失败: ${filePath}`, error);
+      }
     }
   }
 
