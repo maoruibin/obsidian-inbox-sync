@@ -300,6 +300,36 @@ export class MarkdownWriter {
   }
 
   /**
+   * 撞名检测:计算清洗后的文件夹名,如果跟现有 boxFolders 值撞了,追加 box_id 短码
+   * 这个方法只算名字,不创建文件夹
+   */
+  async ensureUniqueBoxFolderName(
+    rawName: string,
+    boxId: string,
+    boxFolders: Record<string, string>
+  ): Promise<string> {
+    const sanitized = this.sanitizeBoxFolderName(rawName, boxId);
+
+    // 检查是否跟其他 box_id 的文件夹名撞
+    const existingNames = new Set(
+      Object.entries(boxFolders)
+        .filter(([id]) => id !== boxId)
+        .map(([, name]) => name)
+    );
+
+    if (existingNames.has(sanitized)) {
+      const shortId = boxId.replace(/^box-/, "").slice(0, 8);
+      const unique = `${sanitized}-${shortId}`;
+      console.warn(
+        `[MarkdownWriter] 盒子名 "${rawName}" 撞名,改为 "${unique}"`
+      );
+      return unique;
+    }
+
+    return sanitized;
+  }
+
+  /**
    * 算笔记目标文件夹路径
    * - 有 boxId 且在 boxFolders 里能查到 → inBox/<盒子名>
    * - 否则 → inBox/(根目录)

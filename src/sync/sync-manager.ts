@@ -122,6 +122,9 @@ export class SyncManager {
       const boxNameMap = await this.buildBoxNameMap();
       this.noteParser.setBoxNameMap(boxNameMap);
 
+      // 1.6 对账盒子文件夹（rename / delete / 新增），把状态写回 metadata
+      await this.reconcileBoxFolders(syncMetadata, boxNameMap);
+
       // 2. 列出云端所有文件元数据（快速，只拿 ETag/MTime，不下载内容）
       notify?.("扫描云端文件列表...");
       const cloudFiles = await this.cloudClient.listNotes();
@@ -421,5 +424,62 @@ export class SyncManager {
       }
     }
     throw new Error("重试次数耗尽");
+  }
+
+  /**
+   * 盒子文件夹对账:
+   * - boxFolders 里有,boxNameMap 里没有 → 盒子被删了,dissolveBoxFolder
+   * - 两边都有,但 name 不一样 → 盒子被重命名,renameBoxFolder
+   * - boxNameMap 里有,boxFolders 里没有 → 新盒子,不预先建文件夹(等有笔记时再建)
+   *
+   * 这个方法会修改 metadata.boxFolders 和 boxNameMap,调用方负责保存 metadata。
+   */
+  private async reconcileBoxFolders(
+    metadata: SyncMetadata,
+    boxNameMap: Map<string, string>
+  ): Promise<void> {
+    if (!metadata.boxFolders) {
+      metadata.boxFolders = {};
+    }
+    const boxFolders = metadata.boxFolders;
+
+    // 1. 处理重命名 + 删除(遍历 boxFolders)
+    const boxIds = Object.keys(boxFolders);
+    for (const boxId of boxIds) {
+      const oldFolderName = boxFolders[boxId];
+      const newName = boxNameMap.get(boxId);
+
+      if (!newName) {
+        // boxes.json 里查不到 → 当作被删
+        console.debug(`[SyncManager] 盒子 ${boxId} 在 boxes.json 中已删除,dissolve 文件夹 ${oldFolderName}`);
+        await this.markdownWriter.dissolveBoxFolder(oldFolderName);
+        delete boxFolders[boxId];
+        continue;
+      }
+
+      // 计算清洗后的目标文件夹名(撞名检测在 ensureBoxFolder 阶段做)
+      // 但 rename 时如果新名字清洗后跟旧名字清洗后一样(只是大小写差异等),跳过
+      if (oldFolderName !== newName) {
+        // 在 rename 之前先看新名字是否撞已有文件夹
+        // 注意: renameBoxFolder 内部已经处理了"目标已存在"的撞名情况
+        console.debug(
+          `[SyncManager] 盒子 ${boxId} 重命名: ${oldFolderName} → ${newName}`
+        );
+        await this.markdownWriter.renameBoxFolder(boxId, oldFolderName, newName);
+        boxFolders[boxId] = newName;
+      }
+    }
+
+    // 2. 同步新增的盒子(只更新元数据,不预先建空文件夹)
+    for (const [boxId, name] of boxNameMap.entries()) {
+      if (!boxFolders[boxId]) {
+        // 检查是否已有同名文件夹(撞名检测)
+        const uniqueName = await this.markdownWriter.ensureUniqueBoxFolderName(name, boxId, boxFolders);
+        boxFolders[boxId] = uniqueName;
+        console.debug(
+          `[SyncManager] 新增盒子映射: ${boxId} → ${uniqueName}（暂不建文件夹）`
+        );
+      }
+    }
   }
 }
