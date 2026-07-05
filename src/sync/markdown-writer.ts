@@ -238,6 +238,46 @@ export class MarkdownWriter {
   }
 
   /**
+   * 清洗盒子名作为文件夹名
+   * 规则(参考 spec 段 2):
+   * - 替换 / \ : * ? " < > | 为 -
+   * - 去首尾空格
+   * - 清洗后为空 → fallback 到 box_id 短码 (如 box-abc123)
+   * - 撞名检测在 ensureBoxFolder 里做(需要全局视角)
+   */
+  private sanitizeBoxFolderName(name: string, boxId: string): string {
+    const sanitized = name
+      .replace(/[<>:"/\\|?*]/g, "-")
+      .trim();
+
+    if (!sanitized) {
+      // fallback 到 box_id 本身(已经是 box-xxx 格式)
+      return boxId;
+    }
+    return sanitized;
+  }
+
+  /**
+   * 算笔记目标文件夹路径
+   * - 有 boxId 且在 boxFolders 里能查到 → inBox/<盒子名>
+   * - 否则 → inBox/(根目录)
+   *
+   * 注意:这个方法只看 boxFolders 元数据,不直接读 boxes.json。
+   * SyncManager 会先调 reconcileBoxFolders() 保证 boxFolders 跟 boxes.json 一致。
+   */
+  private computeNoteFolderPath(
+    note: ParsedNote,
+    boxFolders: Record<string, string>
+  ): string {
+    const basePath = this.getBasePath();
+
+    if (note.boxId && boxFolders[note.boxId]) {
+      return `${basePath}/${boxFolders[note.boxId]}`;
+    }
+    return basePath;
+  }
+
+  /**
    * 删除笔记（通过 noteId 查找并删除）
    * 笔记平铺在 inBox/ 目录，直接扫描该目录下的 .md 文件
    */
@@ -347,16 +387,15 @@ export class MarkdownWriter {
   }
 
   /**
-   * 通过 noteId 查找笔记的文件路径
+   * 通过 noteId 查找笔记的文件路径(递归扫描所有子文件夹)
    */
   private async findNotePath(noteId: string): Promise<string | null> {
     const vault = this.app.vault;
     const basePath = this.getBasePath();
 
     try {
-      const files = await vault.adapter.list(basePath);
-      for (const filePath of files.files) {
-        if (!filePath.endsWith(".md")) continue;
+      const result = await this.findAllMdFilesRecursive(basePath);
+      for (const filePath of result) {
         try {
           const content = await vault.adapter.read(filePath);
           const match = content.match(/inbox_id:\s*(\S+)/);
@@ -372,6 +411,31 @@ export class MarkdownWriter {
     }
 
     return null;
+  }
+
+  /**
+   * 递归收集 basePath 下所有 .md 文件路径
+   */
+  private async findAllMdFilesRecursive(dirPath: string): Promise<string[]> {
+    const vault = this.app.vault;
+    const result: string[] = [];
+
+    try {
+      const listing = await vault.adapter.list(dirPath);
+      for (const file of listing.files) {
+        if (file.endsWith(".md")) {
+          result.push(file);
+        }
+      }
+      for (const folder of listing.folders) {
+        const subFiles = await this.findAllMdFilesRecursive(folder);
+        result.push(...subFiles);
+      }
+    } catch {
+      // 文件夹不存在
+    }
+
+    return result;
   }
 
   /**
