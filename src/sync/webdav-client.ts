@@ -1,6 +1,6 @@
 import { createClient, WebDAVClient as WebDAV, WebDAVClientOptions } from "webdav";
 import { CloudClient, CloudFileInfo } from "./cloud-client";
-import { AtomicNote, SyncManifest } from "../types/inbox";
+import { AtomicNote, BoxesManifest, SyncManifest } from "../types/inbox";
 
 /**
  * WebDAV 客户端实现
@@ -68,6 +68,23 @@ export class WebDAVClient implements CloudClient {
       return JSON.parse(content as string) as SyncManifest;
     } catch (error) {
       console.warn("[WebDAV] SYNC_MANIFEST.json 不存在:", error);
+      return null;
+    }
+  }
+
+  /**
+   * 下载 boxes.json（盒子清单）
+   */
+  async downloadBoxesManifest(): Promise<BoxesManifest | null> {
+    const boxesPath = this.getFullPath("boxes.json");
+
+    try {
+      const content = await this.client.getFileContents(boxesPath, {
+        format: "text",
+      });
+      return JSON.parse(content as string) as BoxesManifest;
+    } catch (error) {
+      console.debug("[WebDAV] boxes.json 不存在:", error);
       return null;
     }
   }

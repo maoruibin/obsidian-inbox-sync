@@ -109,6 +109,11 @@ export class MarkdownWriter {
     lines.push(`created: ${note.createdAt.toISOString()}`);
     lines.push(`updated: ${note.updatedAt.toISOString()}`);
 
+    // 盒子归属（来自云端 boxes.json，无盒子不写）
+    if (note.boxName) {
+      lines.push(`box: ${this.escapeYaml(note.boxName)}`);
+    }
+
     // 标签
     if (note.tags.length > 0 && this.settings.enableFrontmatterTags) {
       lines.push("tags:");

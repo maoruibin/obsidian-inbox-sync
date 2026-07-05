@@ -1,4 +1,4 @@
-import { AtomicNote, SyncManifest } from "../types/inbox";
+import { AtomicNote, BoxesManifest, SyncManifest } from "../types/inbox";
 
 /**
  * 云存储文件信息
@@ -25,6 +25,12 @@ export interface CloudClient {
    * @returns manifest 对象，如果不存在返回 null
    */
   downloadManifest(): Promise<SyncManifest | null>;
+
+  /**
+   * 下载 boxes.json（盒子清单）
+   * @returns 盒子清单对象，不存在或解析失败返回 null
+   */
+  downloadBoxesManifest(): Promise<BoxesManifest | null>;
 
   /**
    * 下载单个原子笔记

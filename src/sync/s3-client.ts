@@ -1,5 +1,5 @@
 import { CloudClient, CloudFileInfo } from "./cloud-client";
-import { AtomicNote, SyncManifest } from "../types/inbox";
+import { AtomicNote, BoxesManifest, SyncManifest } from "../types/inbox";
 import { ObsidianRequestHandler } from "./obsidian-request-handler";
 import type {
   S3Client as S3ClientType,
@@ -223,6 +223,33 @@ export class S3Client implements CloudClient {
       return JSON.parse(bodyStr) as SyncManifest;
     } catch (error) {
       console.warn("[S3] SYNC_MANIFEST.json 不存在:", error);
+      return null;
+    }
+  }
+
+  /**
+   * 下载 boxes.json（盒子清单）
+   */
+  async downloadBoxesManifest(): Promise<BoxesManifest | null> {
+    const objectKey = this.getObjectKey("boxes.json");
+
+    try {
+      const client = await this.getClient();
+      const { GetObjectCommand } = await getAWSSDK();
+
+      const response = await client.send(
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: objectKey,
+        })
+      );
+
+      const bodyStr = typeof response.Body === "string"
+        ? response.Body
+        : await new Response(response.Body as ReadableStream).text();
+      return JSON.parse(bodyStr) as BoxesManifest;
+    } catch (error) {
+      console.debug("[S3] boxes.json 不存在或下载失败:", error);
       return null;
     }
   }

@@ -118,6 +118,10 @@ export class SyncManager {
       const syncMetadata = await this.metadataStorage.load();
       console.debug(`[SyncManager] 本地元数据加载完成, 已有 ${Object.keys(syncMetadata.lastSyncMeta).length} 条记录`);
 
+      // 1.5 拉取盒子清单 boxes.json，构建 boxId→name 映射
+      const boxNameMap = await this.buildBoxNameMap();
+      this.noteParser.setBoxNameMap(boxNameMap);
+
       // 2. 列出云端所有文件元数据（快速，只拿 ETag/MTime，不下载内容）
       notify?.("扫描云端文件列表...");
       const cloudFiles = await this.cloudClient.listNotes();
@@ -371,6 +375,31 @@ export class SyncManager {
     }
 
     console.debug(`[SyncManager] 笔记下载完成: 成功 ${downloaded}, 失败 ${failed}, 总计 ${total}`);
+  }
+
+  /**
+   * 拉取云端 boxes.json，构建 boxId → name 映射
+   * 跳过已删除（deleted_at 非空）的盒子
+   * 文件不存在或解析失败时返回空 Map（不阻断同步）
+   */
+  private async buildBoxNameMap(): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    try {
+      const manifest = await this.cloudClient.downloadBoxesManifest();
+      if (!manifest || !Array.isArray(manifest.boxes)) {
+        console.debug("[SyncManager] boxes.json 不存在或格式无效，跳过盒子名称解析");
+        return map;
+      }
+      for (const box of manifest.boxes) {
+        if (!box.box_id || !box.name) continue;
+        if (box.deleted_at != null) continue;
+        map.set(box.box_id, box.name);
+      }
+      console.debug(`[SyncManager] 盒子清单加载完成, 共 ${map.size} 个有效盒子`);
+    } catch (error) {
+      console.warn("[SyncManager] 拉取 boxes.json 失败，盒子名称将退回旧字段:", error);
+    }
+    return map;
   }
 
   /**

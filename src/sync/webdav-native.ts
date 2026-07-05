@@ -1,5 +1,5 @@
 import { CloudClient, CloudFileInfo } from "./cloud-client";
-import { AtomicNote, SyncManifest } from "../types/inbox";
+import { AtomicNote, BoxesManifest, SyncManifest } from "../types/inbox";
 import { App, requestUrl } from "obsidian";
 
 /**
@@ -144,6 +144,25 @@ export class WebDAVNativeClient implements CloudClient {
       return null;
     } catch (error) {
       console.warn("[WebDAV] SYNC_MANIFEST.json 下载失败:", error);
+      return null;
+    }
+  }
+
+  /**
+   * 下载 boxes.json（盒子清单）
+   */
+  async downloadBoxesManifest(): Promise<BoxesManifest | null> {
+    try {
+      const result = await this.webdavRequest("GET", "boxes.json");
+
+      if (result.status === 200) {
+        return JSON.parse(result.text) as BoxesManifest;
+      }
+
+      console.debug("[WebDAV] boxes.json 不存在:", result.status);
+      return null;
+    } catch (error) {
+      console.warn("[WebDAV] boxes.json 下载失败:", error);
       return null;
     }
   }

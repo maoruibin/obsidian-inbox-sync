@@ -84,6 +84,8 @@ export interface AtomicNoteContent {
   content: string;
   assets?: XResourceInfo[];
   links?: NoteLink[];
+  box_id?: string;          // 盒子归属（新协议，稳定 ID）
+  box?: string;             // 盒子名称（旧协议兼容字段，只读不写）
 }
 
 /**
@@ -116,6 +118,27 @@ export interface AtomicNoteAnnotation {
   created_at?: string;
   updated_at?: string;
   is_removed?: boolean;
+}
+
+/**
+ * boxes.json 结构 - 盒子清单（独立于笔记同步）
+ */
+export interface BoxesManifest {
+  ver?: number;
+  updated_at?: number;
+  boxes: BoxInfo[];
+}
+
+/** 单个盒子的元数据 */
+export interface BoxInfo {
+  box_id: string;
+  name: string;
+  include_in_home?: boolean;
+  sort_index?: number;
+  is_default?: boolean;
+  created_at?: number;
+  updated_at?: number;
+  deleted_at?: number | null;   // 墓碑：非 null 表示已删除
 }
 
 /**
@@ -164,6 +187,8 @@ export interface ParsedNote {
   isRemoved: boolean;       // 是否已删除
   parentId?: string;        // 父笔记 noteId（批注笔记）
   annotations: ParsedAnnotation[];
+  boxId?: string;           // 盒子 ID（云端 content.box_id）
+  boxName?: string;         // 盒子名称（按 boxes.json 解析，给 frontmatter 用）
 }
 
 /**
