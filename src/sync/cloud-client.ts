@@ -38,6 +38,12 @@ export interface CloudClient {
   downloadAtomicNote(path: string): Promise<AtomicNote | null>;
 
   /**
+   * 上传原子笔记（覆盖云端 note-xxx.json）
+   * 软删除场景：传入的 note.flags.is_removed = true
+   */
+  uploadAtomicNote(note: AtomicNote): Promise<boolean>;
+
+  /**
    * 下载 ZIP 批量包（二进制）
    */
   downloadZipBatch(fileName: string): Promise<ArrayBuffer | null>;

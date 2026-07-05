@@ -5,6 +5,7 @@ import type {
   S3Client as S3ClientType,
   ListObjectsV2Command as ListObjectsV2CommandCtor,
   GetObjectCommand as GetObjectCommandCtor,
+  PutObjectCommand as PutObjectCommandCtor,
   ListObjectsV2CommandInput,
   ListObjectsV2CommandOutput,
   GetObjectCommandInput,
@@ -16,21 +17,24 @@ import type {
 let S3ClientClass: typeof S3ClientType | undefined;
 let ListObjectsV2Command: typeof ListObjectsV2CommandCtor | undefined;
 let GetObjectCommand: typeof GetObjectCommandCtor | undefined;
+let PutObjectCommand: typeof PutObjectCommandCtor | undefined;
 
 interface AWSSDK {
   S3ClientClass: typeof S3ClientType;
   ListObjectsV2Command: typeof ListObjectsV2CommandCtor;
   GetObjectCommand: typeof GetObjectCommandCtor;
+  PutObjectCommand: typeof PutObjectCommandCtor;
 }
 
 async function getAWSSDK(): Promise<AWSSDK> {
-  if (!S3ClientClass || !ListObjectsV2Command || !GetObjectCommand) {
+  if (!S3ClientClass || !ListObjectsV2Command || !GetObjectCommand || !PutObjectCommand) {
     const sdk = await import("@aws-sdk/client-s3");
     S3ClientClass = sdk.S3Client;
     ListObjectsV2Command = sdk.ListObjectsV2Command;
     GetObjectCommand = sdk.GetObjectCommand;
+    PutObjectCommand = sdk.PutObjectCommand;
   }
-  return { S3ClientClass, ListObjectsV2Command, GetObjectCommand };
+  return { S3ClientClass, ListObjectsV2Command, GetObjectCommand, PutObjectCommand };
 }
 
 /**
@@ -434,6 +438,31 @@ export class S3Client implements CloudClient {
     } catch (error) {
       console.error(`[S3] 下载资源失败: ${remotePath}`, error);
       return null;
+    }
+  }
+
+  /**
+   * 上传原子笔记（覆盖云端 notes/note-xxx.json）
+   * 用于双向同步：本地修改/软删除推送到云端
+   */
+  async uploadAtomicNote(note: AtomicNote): Promise<boolean> {
+    const key = this.getObjectKey(`notes/${note.id}.json`);
+    try {
+      const client = await this.getClient();
+      const { PutObjectCommand } = await getAWSSDK();
+      await client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: JSON.stringify(note),
+          ContentType: "application/json",
+        })
+      );
+      console.debug(`[S3] 上传笔记成功: ${note.id}`);
+      return true;
+    } catch (error) {
+      console.warn(`[S3] 上传笔记失败: ${note.id}`, error);
+      return false;
     }
   }
 

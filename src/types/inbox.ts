@@ -237,6 +237,13 @@ export interface CloudNoteEntry {
 export interface NoteSyncMeta {
   etag: string;             // S3 ETag
   mtime: number;            // 云端最后修改时间（毫秒）
+  /**
+   * 本地文件 mtime 基线（毫秒时间戳）
+   * 上次同步完成后记录，用于对比本地是否又有改动。
+   * 关键：vault.modify 写入 frontmatter 会改 mtime，必须以上传/下载完成后的值为基线，
+   * 否则会无限循环（自己写自己读，永远以为本地有改动）
+   */
+  lastLocalMtime?: number;
 }
 
 /**
@@ -263,6 +270,8 @@ export interface SyncStats {
   downloadedAssets: number;
   skippedAssets: number;
   failedAssets: number;
+  uploadedNotes: number;    // 本地→云端：修改上传
+  softDeletedNotes: number; // 本地→云端：软删除传播
   startTime: number;
   endTime: number;
   errors: string[];
