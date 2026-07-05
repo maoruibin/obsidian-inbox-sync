@@ -1,4 +1,4 @@
-import { App, TFile } from "obsidian";
+import { App, TFile, TFolder } from "obsidian";
 import { InboxSyncSettings } from "../types/settings";
 import { ParsedAnnotation, ParsedNote } from "../types/inbox";
 
@@ -560,5 +560,65 @@ export class MarkdownWriter {
     } catch (error) {
       console.error(`[MarkdownWriter] 转换链接失败: ${filePath}`, error);
     }
+  }
+
+  /**
+   * 重命名盒子文件夹 + 更新内部笔记的 frontmatter box 字段
+   * Obsidian 的 vault.rename 会自动修复 [[link]] 引用
+   */
+  async renameBoxFolder(
+    boxId: string,
+    oldFolderName: string,
+    newFolderName: string
+  ): Promise<void> {
+    const vault = this.app.vault;
+    const basePath = this.getBasePath();
+    const oldPath = `${basePath}/${oldFolderName}`;
+    const newPath = `${basePath}/${newFolderName}`;
+
+    // 检查旧文件夹是否存在
+    const oldFolder = vault.getAbstractFileByPath(oldPath);
+    if (!(oldFolder instanceof TFolder)) {
+      console.debug(`[MarkdownWriter] renameBoxFolder: ${oldPath} 不存在,跳过`);
+      return;
+    }
+
+    // 如果新路径已存在(用户手动建了同名文件夹),改名时撞车
+    const newFolder = vault.getAbstractFileByPath(newPath);
+    if (newFolder instanceof TFolder) {
+      console.warn(
+        `[MarkdownWriter] renameBoxFolder: 目标 ${newPath} 已存在,改为追加 box_id 后缀`
+      );
+      const safeNewPath = `${basePath}/${newFolderName}-${boxId.slice(0, 8)}`;
+      await vault.rename(oldFolder, safeNewPath);
+    } else {
+      await vault.rename(oldFolder, newPath);
+      console.debug(`[MarkdownWriter] 文件夹重命名: ${oldPath} → ${newPath}`);
+    }
+
+    // 遍历新文件夹下所有 .md,更新 frontmatter box 字段
+    const targetPath = newFolder instanceof TFolder
+      ? newPath
+      : `${basePath}/${newFolderName}-${boxId.slice(0, 8)}`;
+    const mdFiles = await this.findAllMdFilesRecursive(targetPath);
+    for (const filePath of mdFiles) {
+      await this.updateFrontmatterBoxField(filePath, newFolderName);
+    }
+  }
+
+  /**
+   * 用 Obsidian 的 processFrontMatter 更新某文件的 box 字段
+   */
+  private async updateFrontmatterBoxField(
+    filePath: string,
+    newBoxName: string
+  ): Promise<void> {
+    const vault = this.app.vault;
+    const file = vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile)) return;
+
+    await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+      frontmatter["box"] = newBoxName;
+    });
   }
 }
