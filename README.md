@@ -13,19 +13,39 @@
 
 ## 安装
 
-### 方法1：手动安装
+> 插件尚未进入 Obsidian 官方社区目录（审核排队中），目前推荐用 BRAT 安装。
 
-1. 下载最新版本的 `main.js` 和 `manifest.json`
-2. 将文件放入 Obsidian vault 的插件目录：`.obsidian/plugins/obsidian-inbox-sync/`
-3. 在 Obsidian 设置中启用插件
+### 方法 1：BRAT 安装（推荐）
 
-### 方法2：开发模式
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) 可以从 GitHub 仓库直接安装插件，并自动接收更新。适合尚未进入官方目录的插件。
+
+1. 在 Obsidian 中安装并启用 **BRAT** 插件（社区目录可搜到）
+2. 打开 BRAT 设置 → **Add Beta plugin** → 输入仓库地址：
+   ```
+   maoruibin/obsidian-inbox-sync
+   ```
+3. 回到 Obsidian 设置 → 社区插件，启用 **inBox Sync**
+
+之后本仓库发版，BRAT 会自动拉取更新。
+
+### 方法 2：手动安装
+
+1. 从 [Releases](https://github.com/maoruibin/obsidian-inbox-sync/releases) 下载 `main.js`、`manifest.json`、`styles.css`
+2. 把文件放到 Obsidian vault 的插件目录：`.obsidian/plugins/inbox-sync/`
+3. 在 Obsidian 设置中启用 **inBox Sync**
+
+> 升级时需要重复上述步骤手动替换文件，所以非开发者推荐用 BRAT。
+
+### 方法 3：开发模式（贡献者）
 
 ```bash
+git clone https://github.com/maoruibin/obsidian-inbox-sync.git
 cd obsidian-inbox-sync
 npm install
 npm run dev
 ```
+
+`npm run dev` 会监听文件变化自动重新构建，并把产物复制到配置的 Vault 插件目录。
 
 ## 配置
 
@@ -83,6 +103,7 @@ title: 今日记录
 inbox_id: note-abc123
 created: 2025-04-10T10:30:00.000Z
 updated: 2025-04-10T10:30:00.000Z
+box: 工作
 tags:
   - 日记/生活
   - 心情/开心
@@ -93,6 +114,8 @@ tags:
 
 ![[../assets/images/2025/04/photo.jpg]]
 ```
+
+> `box` 字段表示笔记所属的盒子（来自云端 `boxes.json`），无盒子的笔记不会写这一行。
 
 ## 开发
 
