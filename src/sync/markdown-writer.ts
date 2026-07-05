@@ -624,4 +624,75 @@ export class MarkdownWriter {
       frontmatter["box"] = newBoxName;
     });
   }
+
+  /**
+   * 解散盒子文件夹:所有笔记移回根目录,删 box frontmatter 字段,删空文件夹
+   * 用于盒子被 deleted_at 墓碑 / boxes.json 里查不到的情况
+   */
+  async dissolveBoxFolder(folderName: string): Promise<void> {
+    const vault = this.app.vault;
+    const basePath = this.getBasePath();
+    const folderPath = `${basePath}/${folderName}`;
+
+    const folder = vault.getAbstractFileByPath(folderPath);
+    if (!(folder instanceof TFolder)) {
+      console.debug(`[MarkdownWriter] dissolveBoxFolder: ${folderPath} 不存在`);
+      return;
+    }
+
+    // 收集文件夹下所有 .md(直接子文件,不递归 — 盒子文件夹不嵌套)
+    const mdFiles = await this.findAllMdFilesRecursive(folderPath);
+
+    for (const filePath of mdFiles) {
+      const file = vault.getAbstractFileByPath(filePath);
+      if (!(file instanceof TFile)) continue;
+
+      // 移到根目录
+      const fileName = filePath.split("/").pop()!;
+      const newPath = `${basePath}/${fileName}`;
+
+      // 处理同名冲突(根目录已有同名文件)
+      let safeNewPath = newPath;
+      let counter = 1;
+      while (vault.getAbstractFileByPath(safeNewPath) instanceof TFile) {
+        const dotIdx = fileName.lastIndexOf(".");
+        const base = dotIdx > 0 ? fileName.substring(0, dotIdx) : fileName;
+        const ext = dotIdx > 0 ? fileName.substring(dotIdx) : "";
+        safeNewPath = `${basePath}/${base}-${counter}${ext}`;
+        counter++;
+      }
+
+      try {
+        await vault.rename(file, safeNewPath);
+        // 删 box frontmatter 字段
+        const movedFile = vault.getAbstractFileByPath(safeNewPath);
+        if (movedFile instanceof TFile) {
+          await this.app.fileManager.processFrontMatter(movedFile, (frontmatter) => {
+            delete frontmatter["box"];
+          });
+        }
+      } catch (error) {
+        console.error(`[MarkdownWriter] dissolveBoxFolder: 移动失败 ${filePath}`, error);
+      }
+    }
+
+    // 删空文件夹
+    const folderAfterMove = vault.getAbstractFileByPath(folderPath);
+    if (folderAfterMove instanceof TFolder) {
+      try {
+        // 检查文件夹是否真的空(list 看下)
+        const listing = await vault.adapter.list(folderPath);
+        if (listing.files.length === 0 && listing.folders.length === 0) {
+          await vault.delete(folderAfterMove, true);
+          console.debug(`[MarkdownWriter] 已删除空文件夹: ${folderPath}`);
+        } else {
+          console.warn(
+            `[MarkdownWriter] 文件夹非空,未删除: ${folderPath}, files=${listing.files.length}, folders=${listing.folders.length}`
+          );
+        }
+      } catch (error) {
+        console.error(`[MarkdownWriter] 删除空文件夹失败: ${folderPath}`, error);
+      }
+    }
+  }
 }
