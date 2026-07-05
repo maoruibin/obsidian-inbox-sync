@@ -122,9 +122,12 @@ export class SyncManager {
       const boxNameMap = await this.buildBoxNameMap();
       this.noteParser.setBoxNameMap(boxNameMap);
 
-      // 1.6 对账盒子文件夹（rename / delete / 新增），把状态写回 metadata
-      await this.reconcileBoxFolders(syncMetadata, boxNameMap);
-
+	      // 1.6 对账盒子文件夹（rename / delete / 新增），把状态写回 metadata
+	      try {
+	        await this.reconcileBoxFolders(syncMetadata, boxNameMap);
+	      } catch (error) {
+	        console.warn("[SyncManager] 盒子文件夹对账失败,继续同步:", error);
+	      }
       // 2. 列出云端所有文件元数据（快速，只拿 ETag/MTime，不下载内容）
       notify?.("扫描云端文件列表...");
       const cloudFiles = await this.cloudClient.listNotes();
