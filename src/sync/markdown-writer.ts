@@ -350,25 +350,32 @@ export class MarkdownWriter {
   }
 
   /**
-   * 删除笔记（通过 noteId 查找并删除）
-   * 笔记平铺在 inBox/ 目录，直接扫描该目录下的 .md 文件
+   * 删除笔记(通过 noteId 查找并删除)
+   * 笔记可能在根目录或盒子子文件夹,递归扫描
    */
   async deleteNote(noteId: string): Promise<boolean> {
     const vault = this.app.vault;
     const basePath = this.getBasePath();
 
     try {
-      const files = await vault.adapter.list(basePath);
+      const allFiles = await this.findAllMdFilesRecursive(basePath);
 
-      for (const filePath of files.files) {
+      for (const filePath of allFiles) {
         if (!filePath.endsWith(".md")) continue;
 
         try {
           const content = await vault.adapter.read(filePath);
           const match = content.match(/inbox_id:\s*(\S+)/);
           if (match && match[1] === noteId) {
+            // 记住所在文件夹,删完后检查
+            const parentFolder = filePath.substring(0, filePath.lastIndexOf("/"));
             await vault.adapter.remove(filePath);
             console.debug(`[MarkdownWriter] 已删除笔记: ${filePath}`);
+
+            // 清理空文件夹(只在 parentFolder 不是根目录时)
+            if (parentFolder !== basePath) {
+              await this.cleanupEmptyFolder(parentFolder);
+            }
             return true;
           }
         } catch {
@@ -380,6 +387,25 @@ export class MarkdownWriter {
     }
 
     return false;
+  }
+
+  /**
+   * 如果文件夹为空,删除它(盒子文件夹没有笔记了就清掉)
+   */
+  private async cleanupEmptyFolder(folderPath: string): Promise<void> {
+    const vault = this.app.vault;
+    try {
+      const listing = await vault.adapter.list(folderPath);
+      if (listing.files.length === 0 && listing.folders.length === 0) {
+        const folder = vault.getAbstractFileByPath(folderPath);
+        if (folder instanceof TFolder) {
+          await vault.delete(folder, true);
+          console.debug(`[MarkdownWriter] 已清理空文件夹: ${folderPath}`);
+        }
+      }
+    } catch (error) {
+      // 忽略
+    }
   }
 
   /**
