@@ -69,29 +69,39 @@ npm run dev
 
 ## 目录结构
 
-同步后的目录结构：
+同步后的目录结构会按盒子组织:
 
 ```
 inBox/
-├── notes/           # 笔记文件
-│   └── 2025/
-│       └── 04/
-│           └── 10/
-│               └── note-title.md
-├── assets/          # 资源文件
+├── notes/                          # 无盒子笔记(根目录平铺)
+│   ├── 2025-04-10 note-title.md
+│   └── 2025-04-11 another.md
+├── 工作/                            # "工作"盒子下的笔记
+│   └── project-xxx.md
+├── 生活/                            # "生活"盒子下的笔记
+│   └── shopping-list.md
+├── assets/                          # 资源文件(所有盒子共享)
 │   ├── images/
-│   │   └── 2025/
-│   │       └── 04/
-│   │           └── photo.jpg
+│   │   └── photo.jpg
 │   ├── videos/
 │   │   └── video.mp4
 │   ├── audios/
-│   │   └── 2025-04-10/
-│   │       └── recording.mp3
+│   │   └── recording.mp3
 │   └── attachments/
 │       └── file.pdf
-└── .inbox-sync-meta.json  # 同步元数据
+└── .inbox-sync-meta.json          # 同步元数据(含盒子文件夹映射)
 ```
+
+**盒子文件夹规则**:
+
+- 笔记的 `content.box_id` 在云端 `boxes.json` 里查得到 → 进 `<盒子名>/` 子文件夹
+- 否则(无盒子 / 盒子被删墓碑) → 根目录 `inBox/` 平铺
+- 用户没配盒子时,所有笔记自然都在根目录
+- 盒子重命名时,文件夹自动 rename,frontmatter `box:` 字段同步更新
+- 盒子删除时,文件夹内笔记移回根目录,文件夹清空
+- 资源文件统一放 `assets/`,不按盒子分
+
+盒子名清洗规则: `/ \ : * ? " < > |` 替换为 `-`,空名 fallback 到 box_id 短码,撞名追加 box_id 后缀。
 
 ## Markdown 格式
 

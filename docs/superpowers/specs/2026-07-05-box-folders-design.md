@@ -208,3 +208,9 @@ inBox/assets/
 ### MCP 验证
 
 借助现有 rclone + claude-in-mobile MCP 工具,在真机同步一次后,用 rclone 检查云端不变,用 Obsidian 截图看 vault 结构。
+
+---
+
+## 实施计划
+
+详细任务清单见 [实施计划](../plans/2026-07-05-box-folders-implementation.md)。
