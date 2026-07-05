@@ -246,6 +246,7 @@ export interface SyncMetadata {
   lastSyncTime: number;     // 最后同步时间（毫秒）
   lastSyncMeta: Record<string, NoteSyncMeta>;  // noteId -> {etag, mtime}
   version: string;          // 元数据格式版本
+  boxFolders?: Record<string, string>;  // boxId -> 文件夹名（用于对账重命名/删除）
 }
 
 /**

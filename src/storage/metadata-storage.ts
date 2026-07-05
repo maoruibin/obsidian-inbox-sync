@@ -50,6 +50,12 @@ export class MetadataStorage {
         console.debug("[MetadataStorage] 迁移旧格式元数据完成");
       }
 
+      // 迁移：旧元数据没有 boxFolders 字段，补空对象
+      if (!data.boxFolders) {
+        data.boxFolders = {};
+        console.debug("[MetadataStorage] 迁移：补 boxFolders 空对象");
+      }
+
       // 验证格式
       if (this.isValidMetadata(data)) {
         return data;
