@@ -4,9 +4,6 @@ import {
   ParsedAnnotation,
   AtomicNote,
   AtomicNoteAnnotation,
-  AtomicNoteContent,
-  AtomicNoteMeta,
-  AtomicNoteFlags,
   XResourceInfo,
   BlockExtra,
   VoiceInfo,
@@ -17,25 +14,6 @@ import {
   getIsRemoved,
   getParentId,
 } from "../types/inbox";
-
-/**
- * 序列化输入：本地 Markdown → AtomicNote
- */
-export interface SerializeInput {
-  noteId: string;
-  title: string;
-  markdown: string;        // 已去除 frontmatter 的正文（含可能的批注块）
-  boxId?: string;
-  parentId?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  isRemoved: boolean;
-  /** 云端原始笔记（如果有，用于保留 ver/imageJson/extra/annotations 等字段） */
-  original?: AtomicNote;
-}
-
-/** 批注块起始标记 — 必须与 markdown-writer 中的 ANNOTATION_BLOCK_START 保持一致 */
-const ANNOTATION_BLOCK_MARKER = "\n\n---\n\n> **批注**";
 
 /**
  * 笔记解析器
@@ -412,76 +390,5 @@ export class NoteParser {
     if (!value) return fallback;
     const parsed = new Date(value).getTime();
     return Number.isFinite(parsed) ? parsed : fallback;
-  }
-
-  /**
-   * 序列化本地 Markdown → AtomicNote（用于上传）
-   * - 如果传入 original，保留云端原始的 imageJson/extra/annotations/ver/blockId 等
-   * - 否则降级为最小可用的 AtomicNote（会丢失资源信息，但保留 title/content/meta/flags）
-   * - 自动剥离正文末尾的批注块（避免把本地嵌入/批注回写到云端）
-   */
-  serialize(input: SerializeInput): AtomicNote {
-    const cleanMarkdown = this.stripAnnotationBlock(input.markdown);
-
-    if (input.original) {
-      const o = input.original;
-      const content: AtomicNoteContent = {
-        ...(o.content || {}),
-        title: input.title,
-        content: cleanMarkdown,
-      };
-      if (input.boxId !== undefined) {
-        content.box_id = input.boxId;
-      }
-      const meta: AtomicNoteMeta = {
-        ...(o.meta || {}),
-        updated_at: input.updatedAt.toISOString(),
-      };
-      const flags: AtomicNoteFlags = {
-        ...(o.flags || {}),
-        is_removed: input.isRemoved,
-      };
-      return {
-        ...o,
-        content,
-        meta,
-        flags,
-        parentId: input.parentId ?? o.parentId,
-        parent_id: input.parentId ?? o.parent_id ?? o.parentId ?? undefined,
-      };
-    }
-
-    // 降级：缺失 original 时构造最小笔记（资源/批注会丢失）
-    return {
-      id: input.noteId,
-      ver: 2,
-      content: {
-        title: input.title,
-        content: cleanMarkdown,
-        ...(input.boxId ? { box_id: input.boxId } : {}),
-      },
-      meta: {
-        created_at: input.createdAt.toISOString(),
-        updated_at: input.updatedAt.toISOString(),
-      },
-      flags: { is_removed: input.isRemoved },
-      parentId: input.parentId ?? null,
-      parent_id: input.parentId ?? undefined,
-      imageJson: "",
-      extra: "",
-      blockId: 0,
-    };
-  }
-
-  /**
-   * 剥离正文末尾的批注块（本地渲染的引用/批注块不上传到云端）
-   */
-  private stripAnnotationBlock(markdown: string): string {
-    if (!markdown) return "";
-    const idx = markdown.indexOf(ANNOTATION_BLOCK_MARKER);
-    if (idx >= 0) {
-      return markdown.substring(0, idx).trimEnd();
-    }
-    return markdown.trimEnd();
   }
 }

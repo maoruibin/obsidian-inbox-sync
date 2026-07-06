@@ -1,12 +1,17 @@
 # inBox Sync for Obsidian
 
-将 [inBox](https://inbox.gudong.site) 笔记同步到 Obsidian vault 的插件。
+将 [inBox](https://inbox.gudong.site) 笔记**单向同步**到 Obsidian vault 的插件。
+
+> inBox 是收集箱，编辑/删除交给桌面端做。插件只读云端，不在 Obsidian 里修改云端数据。
 
 ## 功能
 
-- 支持从 inBox 云存储（WebDAV/S3）同步笔记
-- 双向同步：云端 ↔ Obsidian（修改/软删除双向传播，不支持在 Obsidian 新建笔记）
-- 智能增量同步：仅同步有变化的笔记
+- **单向同步（云端 → Obsidian）**：只下载不上传
+  - inBox App 是收集端，Obsidian 是工作台
+  - 在 Obsidian 里编辑/删除文档不会回传到云端
+  - 不支持在 Obsidian 里新建笔记（新笔记请在 inBox App 创建）
+- 多存储后端：WebDAV / S3 兼容存储
+- 智能增量同步：仅同步有变化的笔记（基于 ETag + mtime）
 - 完整资源支持：图片、视频、录音、附件
 - 自动标签提取：支持层级标签（`#tag/subtag`）
 - 可配置同步间隔和文件夹结构
@@ -65,7 +70,6 @@ npm run dev
 
 - **Vault 文件夹路径**：笔记在 vault 中的存储位置（默认：`inBox`）
 - **自动同步间隔**：自动同步的时间间隔（分钟）
-- **冲突处理策略**：遇到已存在文件时的处理方式
 
 ## 目录结构
 
@@ -127,43 +131,16 @@ tags:
 
 > `box` 字段表示笔记所属的盒子（来自云端 `boxes.json`），无盒子的笔记不会写这一行。
 
-## 双向同步
+## 删除语义
 
-本插件支持云端与 Obsidian 之间的双向同步：
+- 在 inBox App 删除笔记 → 云端 `flags.is_removed=true` → 插件下次同步时移除 Obsidian 对应文件
+- 在 Obsidian 里删文件 → **不影响云端**（单向同步，Obsidian 是只读副本）
 
-- **下载**：云端有变化 → 覆盖本地笔记（按 ETag/mtime 增量）
-- **上传**：本地修改 → 序列化为 atomicNote PUT 到云端 `notes/{noteId}.json`
-- **软删除传播**：本地删除同步过的笔记 → 上传 `flags.is_removed=true`（与 inBox App 行为一致，不直接删云端文件）
+## 已知限制
 
-### 上传触发条件
-
-每次同步结束时扫描本地变更：
-
-| 场景 | 行为 |
-|---|---|
-| 笔记的 `file.stat.mtime > lastLocalMtime` 基线 | 上传修改 |
-| 本地文件不存在（已删除/移出 inBox 文件夹）但 metadata 有记录 | 上传软删除 |
-| 笔记本次同步刚被下载/写入 | 不上传（基线已重置为新 mtime） |
-
-### 冲突处理（Last-Write-Wins，云端优先）
-
-如果同一笔记在云端和本地都改了：
-
-1. 下载阶段先发生 → 本地修改被覆盖
-2. 基线重置为覆盖后的 mtime
-3. 上传阶段比对发现无变化 → 不上传
-
-结果：云端版本胜出，本地修改丢失。这是有意为之的简单策略，避免双向合并的复杂性。
-
-### 不支持的场景
-
-- **新建笔记**：在 Obsidian 中新建的 `.md` 文件没有 `inbox_id` frontmatter，不会被上传。同步只针对云端已有的笔记。
-- **资源上传**：本地新增的图片/录音不会推到云端，仅云端→本地方向同步资源。
-- **盒子归属变更**：移动笔记到不同盒子文件夹不会上传新的 `box_id`（保留 original 的 box_id）。这个限制后续会移除。
-
-### 关键字段
-
-`lastLocalMtime`（存在 `.inbox-sync-meta.json`）：每条笔记上次同步完成后的本地文件 mtime 基线。`vault.modify` 写 frontmatter 会改 mtime，所以必须用这个基线而不是 `lastSyncTime`，否则会无限循环（自己写自己读，永远以为本地有改动）。
+- **不支持在 Obsidian 里新建笔记**：新建请在 inBox App 完成，插件只同步已有 noteId 的笔记
+- **不支持回传**：在 Obsidian 里编辑/删除文档不会影响云端（单向同步）
+- **盒子管理**：盒子的创建/重命名/删除需在 inBox App 完成（插件只读 boxes.json）
 
 ## 开发
 

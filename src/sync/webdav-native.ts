@@ -325,31 +325,6 @@ export class WebDAVNativeClient implements CloudClient {
   }
 
   /**
-   * 上传原子笔记（覆盖云端 notes/note-xxx.json）
-   */
-  async uploadAtomicNote(note: AtomicNote): Promise<boolean> {
-    const notePath = `notes/${note.id}.json`;
-    try {
-      const result = await this.webdavRequest(
-        "PUT",
-        notePath,
-        { "Content-Type": "application/json" },
-        JSON.stringify(note)
-      );
-      const ok = result.status === 200 || result.status === 201 || result.status === 204;
-      if (ok) {
-        console.debug(`[WebDAV] 上传笔记成功: ${note.id}`);
-      } else {
-        console.warn(`[WebDAV] 上传笔记失败: ${note.id}, status=${result.status}`);
-      }
-      return ok;
-    } catch (error) {
-      console.warn(`[WebDAV] 上传笔记异常: ${note.id}`, error);
-      return false;
-    }
-  }
-
-  /**
    * 检查资源文件是否存在（本地）
    * 由 AssetHandler 使用 Obsidian API 实现
    */

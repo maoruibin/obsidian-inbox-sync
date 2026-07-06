@@ -1,9 +1,9 @@
-import { App, TFile } from "obsidian";
+import { App } from "obsidian";
 import { InboxSyncSettings, getCloudRootPath } from "../types/settings";
 import { CloudClient, CloudFileInfo } from "./cloud-client";
 import { WebDAVNativeClient } from "./webdav-native";
 import { S3Client } from "./s3-client";
-import { NoteParser, SerializeInput } from "./note-parser";
+import { NoteParser } from "./note-parser";
 import { MarkdownWriter } from "./markdown-writer";
 import { AssetHandler } from "./asset-handler";
 import {
@@ -15,7 +15,7 @@ import {
 import { MetadataStorage } from "../storage/metadata-storage";
 
 /**
- * 同步管理器 - 协调整个同步流程
+ * 同步管理器 - 协调整个同步流程（单向：inBox 云端 → Obsidian）
  * 增量同步策略（参考 Android ThinkPlus）：
  * 1. listNotes() 拿到所有云端文件元数据（ETag, MTime）← 快，无内容下载
  * 2. 对比本地 lastSyncMeta → ETag 相同则跳过
@@ -105,8 +105,6 @@ export class SyncManager {
       downloadedAssets: 0,
       skippedAssets: 0,
       failedAssets: 0,
-      uploadedNotes: 0,
-      softDeletedNotes: 0,
       startTime: Date.now(),
       endTime: 0,
       errors: [],
@@ -268,29 +266,12 @@ export class SyncManager {
         console.debug(`[SyncManager] 链接转换完成: ${linkConvertCount} 个笔记`);
       }
 
-      // 7. 捕获下载/写入后的本地 mtime 基线
-      // 关键：vault.modify 会改 mtime，必须以写入后的值为基线，否则下次同步会无限循环
-      await this.capturePostDownloadBaselines(noteIdFileMap, syncMetadata);
-
-      // 8. 上传本地变更（修改/软删除）到云端
-      const uploadResult = await this.uploadLocalChanges(
-        syncMetadata,
-        allNotes,
-        signal,
-        notify
-      );
-      stats.uploadedNotes = uploadResult.uploaded;
-      stats.softDeletedNotes = uploadResult.softDeleted;
-
-      // 9. 更新元数据：写入所有云端文件的 ETag/MTime（包括跳过的）
+      // 7. 更新元数据：写入所有云端文件的 ETag/MTime（包括跳过的）
       // 参考 Android DownloadService.updateRemoteMetadata() — 即使跳过也要更新元数据
       for (const file of cloudFiles) {
-        const existing = syncMetadata.lastSyncMeta[file.id];
         syncMetadata.lastSyncMeta[file.id] = {
           etag: file.etag || "",
           mtime: file.mtime || 0,
-          // 保留 capturePostDownloadBaselines / uploadLocalChanges 设置的基线
-          lastLocalMtime: existing?.lastLocalMtime,
         };
       }
       syncMetadata.lastSyncTime = Date.now();
@@ -301,12 +282,12 @@ export class SyncManager {
         ? ((unchanged / cloudFiles.length) * 100).toFixed(1)
         : "0";
       notify?.(
-        `同步完成！新增 ${stats.newNotes}, 更新 ${stats.updatedNotes}, 删除 ${stats.deletedNotes}, 上传 ${stats.uploadedNotes}, 跳过 ${unchanged} (${elapsed}s)`
+        `同步完成！新增 ${stats.newNotes}, 更新 ${stats.updatedNotes}, 删除 ${stats.deletedNotes}, 跳过 ${unchanged} (${elapsed}s)`
       );
       console.debug(`[SyncManager] ===== 同步完成 (${elapsed}s) =====`);
       console.debug(`[SyncManager] 增量效率: 跳过 ${unchanged}/${cloudFiles.length} (${efficiency}%)`);
       console.debug(
-        `[SyncManager] 新增: ${stats.newNotes}, 更新: ${stats.updatedNotes}, 删除: ${stats.deletedNotes}, 上传: ${stats.uploadedNotes}, 软删: ${stats.softDeletedNotes}, 失败: ${stats.failedNotes}`
+        `[SyncManager] 新增: ${stats.newNotes}, 更新: ${stats.updatedNotes}, 删除: ${stats.deletedNotes}, 失败: ${stats.failedNotes}`
       );
     } catch (error: unknown) {
       if (signal.aborted) {
@@ -404,247 +385,6 @@ export class SyncManager {
     }
 
     console.debug(`[SyncManager] 笔记下载完成: 成功 ${downloaded}, 失败 ${failed}, 总计 ${total}`);
-  }
-
-  /**
-   * 捕获下载/写入阶段的本地文件 mtime 基线
-   * 必须在 writeNote / convertLinks / updateParentEmbeds 全部完成后调用，
-   * 否则这些写入操作会改 mtime，导致下次同步误以为本地有改动而无限上传。
-   */
-  private async capturePostDownloadBaselines(
-    noteIdFileMap: Map<string, { fileName: string; parsedNote: ParsedNote }>,
-    metadata: SyncMetadata
-  ): Promise<void> {
-    const vault = this.app.vault;
-    const basePath = this.settings.vaultFolderPath.replace(/^\/+|\/+$/g, "");
-
-    let captured = 0;
-    for (const [noteId, info] of noteIdFileMap) {
-      const boxId = info.parsedNote.boxId;
-      const boxFolder = boxId ? metadata.boxFolders?.[boxId] : undefined;
-      const folder = boxFolder ? `${basePath}/${boxFolder}` : basePath;
-      const path = `${folder}/${info.fileName}.md`;
-
-      const file = vault.getAbstractFileByPath(path);
-      if (file instanceof TFile) {
-        const existing = metadata.lastSyncMeta[noteId];
-        metadata.lastSyncMeta[noteId] = {
-          etag: existing?.etag || "",
-          mtime: existing?.mtime || 0,
-          lastLocalMtime: file.stat.mtime,
-        };
-        captured++;
-      }
-    }
-    console.debug(
-      `[SyncManager] 已捕获 ${captured}/${noteIdFileMap.size} 条下载基线 (lastLocalMtime)`
-    );
-  }
-
-  /**
-   * 上传本地变更到云端
-   * - toUpload: 用户修改过的笔记（mtime > 基线），序列化后 PUT 到云端
-   * - toSoftDelete: 曾同步过但本地文件已不存在的 noteId，标记 is_removed=true 上传
-   *
-   * 冲突策略：Last-Write-Wins，云端优先。如果云端本次同步也更新了同一笔记，
-   * download 阶段已覆盖本地修改，capturePostDownloadBaselines 已重置基线，
-   * 此处 mtime 等于新基线，不会再上传。
-   */
-  private async uploadLocalChanges(
-    metadata: SyncMetadata,
-    downloadedNotes: Map<string, AtomicNote>,
-    signal: AbortSignal,
-    notify?: (msg: string) => void
-  ): Promise<{ uploaded: number; softDeleted: number }> {
-    const changes = await this.markdownWriter.findLocallyChangedFiles(metadata);
-    const totalUpload = changes.toUpload.length;
-    const totalSoftDelete = changes.toSoftDelete.length;
-
-    if (totalUpload === 0 && totalSoftDelete === 0) {
-      console.debug("[SyncManager] 无本地变更需要上传");
-      return { uploaded: 0, softDeleted: 0 };
-    }
-
-    console.debug(
-      `[SyncManager] 本地变更：${totalUpload} 条修改, ${totalSoftDelete} 条待软删除`
-    );
-    notify?.(`上传本地变更 (修改 ${totalUpload}, 软删 ${totalSoftDelete})...`);
-
-    let uploaded = 0;
-    let softDeleted = 0;
-
-    for (const { noteId, file } of changes.toUpload) {
-      if (signal.aborted) throw new Error("同步已取消");
-      try {
-        const original = await this.getOriginalNote(noteId, downloadedNotes);
-        const input = await this.buildSerializeInput(noteId, file, original, false);
-        if (!input) continue;
-        const atomic = this.noteParser.serialize(input);
-        const ok = await this.cloudClient.uploadAtomicNote(atomic);
-        if (ok) {
-          uploaded++;
-          const existing = metadata.lastSyncMeta[noteId];
-          metadata.lastSyncMeta[noteId] = {
-            etag: existing?.etag || "",
-            mtime: existing?.mtime || 0,
-            lastLocalMtime: file.stat.mtime,
-          };
-        }
-      } catch (error) {
-        console.warn(`[SyncManager] 上传笔记失败: ${noteId}`, error);
-      }
-    }
-
-    for (const { noteId } of changes.toSoftDelete) {
-      if (signal.aborted) throw new Error("同步已取消");
-      try {
-        const original = await this.getOriginalNote(noteId, downloadedNotes);
-        const input = await this.buildSerializeInput(noteId, null, original, true);
-        if (!input) continue;
-        const atomic = this.noteParser.serialize(input);
-        const ok = await this.cloudClient.uploadAtomicNote(atomic);
-        if (ok) {
-          softDeleted++;
-          // 软删除后清理 metadata，下次同步这条 note 会从云端重新拉取（带 is_removed=true）
-          delete metadata.lastSyncMeta[noteId];
-        }
-      } catch (error) {
-        console.warn(`[SyncManager] 软删除上传失败: ${noteId}`, error);
-      }
-    }
-
-    console.debug(
-      `[SyncManager] 上传完成：修改 ${uploaded}/${totalUpload}, 软删 ${softDeleted}/${totalSoftDelete}`
-    );
-    return { uploaded, softDeleted };
-  }
-
-  /**
-   * 获取云端原始笔记（用于上传时保留 ver/imageJson/extra/annotations 等字段）
-   * 优先用本同步已下载的缓存，缓存未命中时按 notes/{noteId}.json 路径回源拉取。
-   */
-  private async getOriginalNote(
-    noteId: string,
-    downloadedNotes: Map<string, AtomicNote>
-  ): Promise<AtomicNote | undefined> {
-    const cached = downloadedNotes.get(noteId);
-    if (cached) return cached;
-    try {
-      const note = await this.cloudClient.downloadAtomicNote(`notes/${noteId}.json`);
-      if (note) {
-        downloadedNotes.set(noteId, note);
-        return note;
-      }
-    } catch (error) {
-      console.warn(`[SyncManager] 拉取原始笔记失败: ${noteId}`, error);
-    }
-    return undefined;
-  }
-
-  /**
-   * 从本地文件构建 SerializeInput
-   * - file 非 null：从文件读取 + 解析 frontmatter，用于修改上传
-   * - file 为 null：软删除场景，使用 original 的内容兜底
-   */
-  private async buildSerializeInput(
-    noteId: string,
-    file: TFile | null,
-    original: AtomicNote | undefined,
-    isRemoved: boolean
-  ): Promise<SerializeInput | null> {
-    if (!file) {
-      const createdIso = original?.meta?.created_at || new Date().toISOString();
-      return {
-        noteId,
-        title: original?.content?.title || "Untitled",
-        markdown: original?.content?.content || "",
-        boxId: original?.content?.box_id,
-        parentId: original?.parentId || original?.parent_id || undefined,
-        createdAt: new Date(createdIso),
-        updatedAt: new Date(),
-        isRemoved: true,
-        original,
-      };
-    }
-
-    const content = await this.markdownWriter.readFileContent(file);
-    const frontmatter = this.parseFrontmatter(content);
-
-    const titleField = frontmatter.title;
-    const title =
-      typeof titleField === "string" && titleField.trim()
-        ? titleField.trim()
-        : file.basename;
-
-    const createdAt = this.parseFrontmatterDate(
-      frontmatter.created,
-      original?.meta?.created_at
-    );
-    const updatedAt = new Date();
-
-    // box 字段是名字，优先用 original.content.box_id 保证 ID 稳定；缺 original 时无法可靠反推
-    const boxName = typeof frontmatter.box === "string" ? frontmatter.box : undefined;
-    let boxId: string | undefined;
-    if (original?.content?.box_id) {
-      boxId = original.content.box_id;
-    } else if (boxName) {
-      console.warn(
-        `[SyncManager] 缺 original，无法反推 boxId，box="${boxName}" 将丢失`
-      );
-    }
-
-    const parentId = original?.parentId || original?.parent_id || undefined;
-    const body = this.stripFrontmatter(content);
-
-    return {
-      noteId,
-      title,
-      markdown: body,
-      boxId,
-      parentId,
-      createdAt,
-      updatedAt,
-      isRemoved,
-      original,
-    };
-  }
-
-  /**
-   * 简易 frontmatter 解析（仅取顶层 key: value 行）
-   * 复杂场景（多行 tags、嵌套）由 markdown-writer 用 metadataCache 处理，
-   * 这里只需要 title/created/updated/box 这几个标量字段
-   */
-  private parseFrontmatter(content: string): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
-    const match = content.match(/^---\s*\n([\s\S]*?)\n---/);
-    if (!match) return result;
-
-    for (const line of match[1].split(/\r?\n/)) {
-      const m = line.match(/^([A-Za-z_][\w-]*)\s*:\s*(.*)$/);
-      if (!m) continue;
-      let value: unknown = m[2].trim();
-      if (typeof value === "string" && /^".*"$/.test(value)) {
-        value = value.slice(1, -1);
-      }
-      result[m[1]] = value;
-    }
-    return result;
-  }
-
-  private parseFrontmatterDate(value: unknown, fallback?: string): Date {
-    if (typeof value === "string" && value.trim()) {
-      const t = new Date(value.trim()).getTime();
-      if (Number.isFinite(t)) return new Date(t);
-    }
-    if (fallback) {
-      const t = new Date(fallback).getTime();
-      if (Number.isFinite(t)) return new Date(t);
-    }
-    return new Date();
-  }
-
-  private stripFrontmatter(content: string): string {
-    return content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "");
   }
 
   /**

@@ -1,17 +1,9 @@
 import { App, TFile, TFolder } from "obsidian";
 import { InboxSyncSettings } from "../types/settings";
-import { ParsedAnnotation, ParsedNote, SyncMetadata } from "../types/inbox";
+import { ParsedAnnotation, ParsedNote } from "../types/inbox";
 
 /** 批注嵌入块的标记，用于识别和替换 */
 const ANNOTATION_BLOCK_START = "\n\n---\n\n> **批注**\n";
-
-/** 本地变更扫描结果 */
-export interface LocalChangeSet {
-  /** 本地有修改（mtime > 基线）的笔记，待上传 */
-  toUpload: Array<{ noteId: string; file: TFile }>;
-  /** 曾同步过但本地文件已不存在（含被删/被移动出 basePath）的 noteId，待软删除 */
-  toSoftDelete: Array<{ noteId: string }>;
-}
 
 /** writeNote 的返回结果 */
 export interface WriteNoteResult {
@@ -355,72 +347,6 @@ export class MarkdownWriter {
       return `${basePath}/${boxFolders[note.boxId]}`;
     }
     return basePath;
-  }
-
-  /**
-   * 扫描本地变更：
-   * - toUpload: 本地 mtime > lastLocalMtime 基线的笔记
-   * - toSoftDelete: 在 metadata 里有记录但本地已找不到对应文件的 noteId
-   *
-   * 关键：用 lastLocalMtime 基线（而不是 lastSyncTime），因为 vault.modify 写
-   * frontmatter 会改 mtime，必须以上传/下载完成后的实测值为准，否则会无限循环。
-   */
-  async findLocallyChangedFiles(
-    metadata: SyncMetadata
-  ): Promise<LocalChangeSet> {
-    const vault = this.app.vault;
-    const basePath = this.getBasePath();
-    const toUpload: Array<{ noteId: string; file: TFile }> = [];
-    const localNoteIds = new Set<string>();
-
-    const allFiles = vault.getMarkdownFiles();
-    for (const file of allFiles) {
-      if (!file.path.startsWith(basePath + "/")) continue;
-
-      const cache = this.app.metadataCache.getFileCache(file);
-      const frontmatter = cache?.frontmatter;
-      if (!frontmatter) continue;
-
-      const noteId = String(frontmatter.inbox_id ?? "").trim();
-      if (!noteId) continue;
-
-      localNoteIds.add(noteId);
-
-      const meta = metadata.lastSyncMeta[noteId];
-      if (!meta || !meta.lastLocalMtime) {
-        // 没基线（新笔记或未同步过）→ 跳过，等下次同步兜底
-        continue;
-      }
-
-      if (file.stat.mtime > meta.lastLocalMtime) {
-        toUpload.push({ noteId, file });
-      }
-    }
-
-    const toSoftDelete: Array<{ noteId: string }> = [];
-    for (const noteId of Object.keys(metadata.lastSyncMeta)) {
-      if (!localNoteIds.has(noteId)) {
-        // 仅在用户没禁用本地删除传播时上报；此处先收集，由 sync-manager 决定是否上传
-        toSoftDelete.push({ noteId });
-      }
-    }
-
-    return { toUpload, toSoftDelete };
-  }
-
-  /**
-   * 读取文件原始内容（含 frontmatter），供序列化使用
-   */
-  async readFileContent(file: TFile): Promise<string> {
-    return await this.app.vault.read(file);
-  }
-
-  /**
-   * 通过文件路径读取 TFile（用于上传阶段定位文件）
-   */
-  async findFileByPath(path: string): Promise<TFile | null> {
-    const file = this.app.vault.getAbstractFileByPath(path);
-    return file instanceof TFile ? file : null;
   }
 
   /**
