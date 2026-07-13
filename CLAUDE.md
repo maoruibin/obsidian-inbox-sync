@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+## 📚 inBox 生态 Wiki
+
+这是 inBox 笔记生态的 Obsidian 同步插件（单向只读）。改同步逻辑前先读生态 Wiki：
+
+**入口**：[`../inbox-wiki/INDEX.md`](../inbox-wiki/INDEX.md)
+
+本插件的 `src/sync/note-parser.ts` 的 `resolveBox()` 实现是盒子归属解析的参考实现（5 条兜底规则最完整），详见 [跨端差异矩阵](../inbox-wiki/protocols/cross-platform-matrix.md) 分叉点 1。
+
 ## 项目概述
 
 Obsidian 插件，将 inBox 笔记单向同步到 Obsidian vault。支持增量同步、完整资源（图片/视频/录音/附件）、层级标签提取。
