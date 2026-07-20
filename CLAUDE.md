@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## AI 日志与验证规范（必读）
+
+本项目属于 ReProject。AI 修改代码前必须先读并遵守 [`../docs/ai-logging-verification.md`](../docs/ai-logging-verification.md)。写代码时同步补关键日志，交付前说明使用了哪些日志、命令、测试、文件或同步结果完成验证。
+
 ## 📚 inBox 生态 Wiki
 
 这是 inBox 笔记生态的 Obsidian 同步插件（单向只读）。改同步逻辑前先读生态 Wiki：
