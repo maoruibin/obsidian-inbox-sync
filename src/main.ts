@@ -135,7 +135,7 @@ export default class InboxSyncPlugin extends Plugin {
       console.error("Sync error:", error);
       this.updateRibbonIconStatus(SyncStatus.ERROR);
       // 5秒后恢复空闲状态
-      setTimeout(() => this.updateRibbonIconStatus(SyncStatus.IDLE), 5000);
+      window.setTimeout(() => this.updateRibbonIconStatus(SyncStatus.IDLE), 5000);
     }
   }
 
