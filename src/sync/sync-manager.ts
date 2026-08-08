@@ -427,7 +427,7 @@ export class SyncManager {
         if (i === maxRetries - 1) throw error;
         const waitTime = delay * Math.pow(2, i);
         console.warn(`[SyncManager] 操作失败，${waitTime}ms 后重试 (${i + 1}/${maxRetries})`);
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
+        await new Promise((resolve) => window.setTimeout(resolve, waitTime));
       }
     }
     throw new Error("重试次数耗尽");

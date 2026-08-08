@@ -1,14 +1,12 @@
-import { App, PluginSettingTab, Setting, Notice } from "obsidian";
+import { App, PluginSettingTab, Setting, Notice, getLanguage } from "obsidian";
 import InboxSyncPlugin from "../main";
 
 // ========== i18n ==========
 type LangKey = "zh" | "en";
 
 function getLang(): LangKey {
-  // 优先用 navigator.language（Electron 环境），其次 localStorage
-  const lang = (navigator.language
-    || window.localStorage.getItem("language")
-    || "en");
+  // 优先用 Obsidian 官方 getLanguage()，其次 navigator.language
+  const lang = (getLanguage() || navigator.language || "en");
   return lang.startsWith("zh") ? "zh" : "en";
 }
 

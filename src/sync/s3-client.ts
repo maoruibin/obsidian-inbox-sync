@@ -5,12 +5,9 @@ import type {
   S3Client as S3ClientType,
   ListObjectsV2Command as ListObjectsV2CommandCtor,
   GetObjectCommand as GetObjectCommandCtor,
-  ListObjectsV2CommandInput,
-  ListObjectsV2CommandOutput,
-  GetObjectCommandInput,
-  GetObjectCommandOutput,
   _Object as S3Object,
 } from "@aws-sdk/client-s3";
+import { HttpRequest } from "@smithy/protocol-http";
 
 // 动态导入 AWS SDK v3，避免 esbuild 打包问题
 let S3ClientClass: typeof S3ClientType | undefined;
@@ -106,13 +103,17 @@ export class S3Client implements CloudClient {
       });
 
       // 添加 cache-control 中间件（参考 remotely-save）
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // 内联传入让 add 重载自动匹配 BuildMiddleware<ServiceInputTypes, ServiceOutputTypes>，
+      // request 用 HttpRequest.isInstance 类型守卫从 unknown 窄化，避免使用 any
       this.client.middlewareStack.add(
-        (next: any) => (args: any) => {
-          args.request.headers["cache-control"] = "no-cache";
+        (next) => (args) => {
+          const req = args.request;
+          if (HttpRequest.isInstance(req)) {
+            req.headers["cache-control"] = "no-cache";
+          }
           return next(args);
         },
-        { step: "build" }
+        { step: "build", name: "cacheControlMiddleware" }
       );
     }
     return this.client;

@@ -118,7 +118,7 @@ export default class InboxSyncPlugin extends Plugin {
         );
         this.updateRibbonIconStatus(SyncStatus.SUCCESS);
         // 3秒后恢复空闲状态
-        setTimeout(() => this.updateRibbonIconStatus(SyncStatus.IDLE), 3000);
+        window.setTimeout(() => this.updateRibbonIconStatus(SyncStatus.IDLE), 3000);
       } else {
         new Notice(
           `Sync finished with errors: ${stats.failedNotes} notes, ${stats.failedAssets} assets failed`,
@@ -127,7 +127,7 @@ export default class InboxSyncPlugin extends Plugin {
         console.error("Sync errors:", stats.errors);
         this.updateRibbonIconStatus(SyncStatus.ERROR);
         // 5秒后恢复空闲状态
-        setTimeout(() => this.updateRibbonIconStatus(SyncStatus.IDLE), 5000);
+        window.setTimeout(() => this.updateRibbonIconStatus(SyncStatus.IDLE), 5000);
       }
     } catch (error) {
       notice.hide();

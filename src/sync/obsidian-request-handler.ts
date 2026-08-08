@@ -24,7 +24,7 @@ import { buildQueryString } from "@smithy/querystring-builder";
 function requestTimeout(timeoutInMs: number | undefined): Promise<never> {
 	return new Promise((_resolve, reject) => {
 		if (timeoutInMs) {
-			setTimeout(() => {
+			window.setTimeout(() => {
 				const timeoutError = new Error(
 					`Request did not complete within ${timeoutInMs} ms`
 				);
